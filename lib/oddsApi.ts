@@ -60,7 +60,8 @@ async function fetchEvents(apiKey: string): Promise<OddsApiEvent[]> {
 
 async function fetchEventOdds(
   apiKey: string,
-  eventId: string
+  eventId: string,
+  attempt = 0
 ): Promise<{ data: OddsApiEvent | null; remaining: string | null; used: string | null }> {
   const url =
     `${BASE}/sports/${SPORT}/events/${eventId}/odds` +
@@ -68,8 +69,17 @@ async function fetchEventOdds(
   const res = await fetch(url, { cache: "no-store" });
   const remaining = res.headers.get("x-requests-remaining");
   const used = res.headers.get("x-requests-used");
+
+  if (res.status === 422) return { data: null, remaining, used }; // market not offered
+
+  // 429 = rate limit. Retry up to 3 times with exponential backoff.
+  if (res.status === 429 && attempt < 3) {
+    const backoffMs = 500 * Math.pow(2, attempt) + Math.random() * 250;
+    await new Promise((r) => setTimeout(r, backoffMs));
+    return fetchEventOdds(apiKey, eventId, attempt + 1);
+  }
+
   if (!res.ok) {
-    if (res.status === 422) return { data: null, remaining, used };
     throw new Error(
       `Event odds fetch failed (${eventId}): ${res.status} ${await res.text()}`
     );
@@ -246,23 +256,37 @@ export async function getEVPlays(apiKey: string): Promise<OddsApiResult> {
   let lastRemaining: string | null = null;
   let lastUsed: string | null = null;
 
-  const results = await Promise.allSettled(
-    upcoming.map((ev) => fetchEventOdds(apiKey, ev.id))
-  );
+  // Batch concurrency: 4 requests in flight at a time, with a small gap
+  // between batches. Prevents 429 EXCEEDED_FREQ_LIMIT errors.
+  const BATCH_SIZE = 4;
+  const BATCH_GAP_MS = 250;
 
   const allPlays: PlayProw[] = [];
-  results.forEach((r, i) => {
-    if (r.status === "rejected") {
-      errors.push(`Event ${upcoming[i].id}: ${r.reason}`);
-      return;
+
+  for (let i = 0; i < upcoming.length; i += BATCH_SIZE) {
+    const batch = upcoming.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((ev) => fetchEventOdds(apiKey, ev.id))
+    );
+
+    results.forEach((r, j) => {
+      if (r.status === "rejected") {
+        errors.push(`Event ${batch[j].id}: ${r.reason}`);
+        return;
+      }
+      const { data, remaining, used } = r.value;
+      if (remaining !== null) lastRemaining = remaining;
+      if (used !== null) lastUsed = used;
+      if (!data) return;
+      const plays = buildPlaysForEvent(data);
+      allPlays.push(...plays);
+    });
+
+    // Small pause between batches if we have more to do
+    if (i + BATCH_SIZE < upcoming.length) {
+      await new Promise((r) => setTimeout(r, BATCH_GAP_MS));
     }
-    const { data, remaining, used } = r.value;
-    if (remaining !== null) lastRemaining = remaining;
-    if (used !== null) lastUsed = used;
-    if (!data) return;
-    const plays = buildPlaysForEvent(data);
-    allPlays.push(...plays);
-  });
+  }
 
   // Default sort: by Pinnacle-weighted EV descending
   allPlays.sort((a, b) => b.pinnacleWeighted.evPercent - a.pinnacleWeighted.evPercent);
