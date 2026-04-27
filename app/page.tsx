@@ -22,12 +22,6 @@ const METHOD_LABELS: Record<Method, string> = {
   pinnacleWeighted: "Pinnacle-weighted",
 };
 
-const METHOD_SHORT: Record<Method, string> = {
-  marketAvgRaw: "Avg",
-  marketAvgDevig: "Devig",
-  pinnacleWeighted: "Pin",
-};
-
 export default function Home() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -57,8 +51,6 @@ export default function Home() {
     load(false);
   }, []);
 
-  // Per-play "delta" = max EV across methods minus min EV across methods.
-  // Big delta = methods disagree a lot — interesting plays to study.
   const playWithDelta = (p: PlayProw) => {
     const evs = [
       p.marketAvgRaw.evPercent,
@@ -211,12 +203,18 @@ export default function Home() {
               <Th onClick={() => setSort("bestAmerican")}>
                 Best Odds{sortIndicator("bestAmerican")}
               </Th>
-              <Th className="border-l border-neutral-800">EV: Avg (raw)</Th>
-              <Th>EV: Devig</Th>
-              <Th onClick={() => setSort("ev")} className="bg-emerald-950/40">
-                EV: Pin-weighted{sortKey === "ev" ? sortIndicator("ev") : ""}
+              <Th className="border-l border-neutral-800">Fair: Avg (raw)</Th>
+              <Th>EV %</Th>
+              <Th className="border-l border-neutral-800">Fair: Devig</Th>
+              <Th>EV %</Th>
+              <Th className="border-l border-neutral-800 bg-emerald-950/40">Fair: Pin-wt</Th>
+              <Th
+                onClick={() => setSort("ev")}
+                className="bg-emerald-950/40"
+              >
+                EV %{sortKey === "ev" ? sortIndicator("ev") : ""}
               </Th>
-              <Th onClick={() => setSort("delta")}>
+              <Th onClick={() => setSort("delta")} className="border-l border-neutral-800">
                 Δ{sortIndicator("delta")}
               </Th>
               <Th>Books</Th>
@@ -225,7 +223,7 @@ export default function Home() {
           <tbody>
             {filteredPlays.length === 0 && !loading && (
               <tr>
-                <td colSpan={11} className="text-center text-neutral-500 py-8">
+                <td colSpan={14} className="text-center text-neutral-500 py-8">
                   {data
                     ? `No plays at or above ${minEV}% EV by ${METHOD_LABELS[filterMethod]}. Try lowering the threshold or switching method.`
                     : "Click Refresh to load."}
@@ -263,16 +261,29 @@ export default function Home() {
                     )}
                   </Td>
                   <Td className="font-medium">{fmtAmerican(p.bestAmerican)}</Td>
-                  <Td className="border-l border-neutral-800 text-right">
+
+                  <Td className="border-l border-neutral-800 text-right text-neutral-300">
+                    {fmtAmerican(p.marketAvgRaw.fairAmerican)}
+                  </Td>
+                  <Td className="text-right">
                     <EvCell ev={p.marketAvgRaw.evPercent} />
+                  </Td>
+
+                  <Td className="border-l border-neutral-800 text-right text-neutral-300">
+                    {fmtAmerican(p.marketAvgDevig.fairAmerican)}
                   </Td>
                   <Td className="text-right">
                     <EvCell ev={p.marketAvgDevig.evPercent} />
                   </Td>
+
+                  <Td className="border-l border-neutral-800 text-right bg-emerald-950/20 text-neutral-200">
+                    {fmtAmerican(p.pinnacleWeighted.fairAmerican)}
+                  </Td>
                   <Td className="text-right bg-emerald-950/20 font-bold">
                     <EvCell ev={p.pinnacleWeighted.evPercent} />
                   </Td>
-                  <Td className="text-right text-neutral-400 text-xs">
+
+                  <Td className="border-l border-neutral-800 text-right text-neutral-400 text-xs">
                     {(delta * 100).toFixed(1)}%
                   </Td>
                   <Td className="text-neutral-500 text-xs">{p.numBooks}</Td>
