@@ -9,7 +9,7 @@ import {
   americanToImplied,
   americanToDecimal,
   devigPower,
-  weightedFairProb,
+  weightedFairProbWithSharps,
   impliedToAmerican,
   calcEV,
 } from "./math";
@@ -17,28 +17,85 @@ import {
 const BASE = "https://api.the-odds-api.com/v4";
 const SPORT = "baseball_mlb";
 const MARKET = "batter_hits";
-const REGIONS = "us,us2,eu"; // eu gives us Pinnacle
 
+// Regions:
+//   us  - DraftKings, FanDuel, BetMGM, Caesars (paid), BetRivers, BetUS, Bovada, etc.
+//   us2 - ESPN BET, Fliff, Bally Bet, betPARX, BetAnySports, Hard Rock variants
+//   eu  - Pinnacle (sharp), plus other EU books that mostly skip MLB props
+//   us_ex - Exchanges: Novig (no-vig), ProphetX, Kalshi, BetOpenly
+const REGIONS = "us,us2,eu,us_ex";
+
+/**
+ * Books we accept into the analysis. Verified against the official Odds API
+ * bookmaker list at the-odds-api.com/sports-odds-data/bookmaker-apis.html
+ */
 const TARGET_BOOKS = new Set([
-  "pinnacle",
+  // Sharps / consensus anchors (used in "sharps pool" for fair calc)
+  "pinnacle",          // eu region
+  "novig",             // us_ex - no-vig peer-to-peer exchange
+  "prophetx",          // us_ex - peer-to-peer exchange
+
+  // Other exchanges
+  "betopenly",         // us_ex
+  "kalshi",            // us_ex - prediction market
+
+  // US major retail
   "draftkings",
   "fanduel",
   "betmgm",
-  "hardrockbet",
-  "fanatics",
-  "betonlineag",
-  "circasports",
-  "bet365",
-  "williamhill_us", // Caesars
+  "williamhill_us",    // Caesars (requires paid sub)
   "betrivers",
-  "fliff",
-  "espnbet",
+  "fanatics",          // requires paid sub
   "betus",
+  "bovada",
+
+  // US2 (newer wave / often softer pricing)
+  "espnbet",           // theScore Bet / formerly ESPN BET
+  "ballybet",
+  "betparx",
+  "fliff",
+  "betanysports",      // formerly BetAnySports
+  "hardrockbet",       // IN + multiple states with same odds
+  "hardrockbet_az",
+  "hardrockbet_fl",
+  "hardrockbet_oh",
+
+  // Offshore / low-vig (us region)
+  "betonlineag",       // BetOnline.ag — sister site to Bookmaker.eu
   "lowvig",
   "mybookieag",
-  "bookmaker",
-  "sportsbetting",
+]);
+
+/**
+ * Books considered "sharp" for fair-odds weighting purposes.
+ * These get pooled together with elevated weight (vs. retail books).
+ */
+export const SHARP_BOOKS = new Set([
+  "pinnacle",
+  "novig",
+  "prophetx",
+]);
+
+/**
+ * Books we consider "soft" — these are good targets for the Single Book
+ * (target-book) mode because they tend to have stale or mispriced lines.
+ */
+export const SOFT_BOOKS = new Set([
+  "betonlineag",
+  "lowvig",
+  "mybookieag",
+  "betus",
   "bovada",
+  "fliff",
+  "ballybet",
+  "betparx",
+  "betanysports",
+  "espnbet",
+  "hardrockbet",
+  "hardrockbet_az",
+  "hardrockbet_fl",
+  "hardrockbet_oh",
+  "fanatics",
 ]);
 
 export interface OddsApiResult {
@@ -70,9 +127,10 @@ async function fetchEventOdds(
   const remaining = res.headers.get("x-requests-remaining");
   const used = res.headers.get("x-requests-used");
 
-  if (res.status === 422) return { data: null, remaining, used }; // market not offered
+  // 422 = market not offered for this event yet
+  if (res.status === 422) return { data: null, remaining, used };
 
-  // 429 = rate limit. Retry up to 3 times with exponential backoff.
+  // 429 = rate-limited. Retry up to 3 times with exponential backoff.
   if (res.status === 429 && attempt < 3) {
     const backoffMs = 500 * Math.pow(2, attempt) + Math.random() * 250;
     await new Promise((r) => setTimeout(r, backoffMs));
@@ -87,6 +145,13 @@ async function fetchEventOdds(
   return { data: await res.json(), remaining, used };
 }
 
+/**
+ * Build per-book offers (paired Over/Under at the same line) for a given player.
+ * Excludes books that don't have BOTH sides — we need both to de-vig.
+ *
+ * Special handling for exchanges (Novig, BetOpenly): these may not always have
+ * both sides liquid. We still include them if both sides are present.
+ */
 function buildBookOffers(
   bookmakers: OddsApiBookmaker[],
   player: string,
@@ -103,7 +168,7 @@ function buildBookOffers(
     const under = market.outcomes.find(
       (o) => o.name === "Under" && o.description === player && o.point === line
     );
-    if (!over || !under) continue;
+    if (!over || !under) continue; // need both sides to de-vig
 
     const overImplied = americanToImplied(over.price);
     const underImplied = americanToImplied(under.price);
@@ -126,9 +191,6 @@ function buildBookOffers(
   return offers;
 }
 
-/**
- * Build a FairEstimate given a fair probability and the best American price.
- */
 function buildFairEstimate(fairProb: number, bestAmerican: number): FairEstimate {
   return {
     fairProb,
@@ -138,36 +200,45 @@ function buildFairEstimate(fairProb: number, bestAmerican: number): FairEstimate
 }
 
 /**
- * Compute three fair-odds estimates for a single side (Over or Under) using
- * the same set of book offers.
+ * Compute three fair-odds estimates for a single side using the same set of offers:
+ *   1. Raw market average (vig included) — what most people do by default
+ *   2. De-vigged market average — vig removed, equal weight
+ *   3. Sharp-pool-weighted — sharps (Pinnacle/Novig/ProphetX) get 50% weight,
+ *      retail books split the other 50%
  */
 function computeAllFair(
   offers: BookOffer[],
   side: "Over" | "Under",
   bestAmerican: number
-): { raw: FairEstimate; devig: FairEstimate; weighted: FairEstimate; pinnacleUsed: boolean } {
-  // Raw implied probs (vig still in) — your current "market average" method
+): {
+  raw: FairEstimate;
+  devig: FairEstimate;
+  weighted: FairEstimate;
+  pinnacleUsed: boolean;
+  sharpCount: number;
+} {
   const rawProbs = offers.map((o) => (side === "Over" ? o.overImplied : o.underImplied));
   const rawAvg = rawProbs.reduce((s, p) => s + p, 0) / rawProbs.length;
 
-  // De-vigged probs
   const devigProbs = offers.map((o) => ({
     bookKey: o.bookKey,
     prob: side === "Over" ? o.overDevigged : o.underDevigged,
   }));
 
-  // Method 2: plain average of de-vigged probs (no Pinnacle weighting)
-  const devigAvg =
-    devigProbs.reduce((s, b) => s + b.prob, 0) / devigProbs.length;
+  const devigAvg = devigProbs.reduce((s, b) => s + b.prob, 0) / devigProbs.length;
 
-  // Method 3: Pinnacle-weighted de-vigged
-  const weighted = weightedFairProb(devigProbs);
+  // Sharp-pool-weighted (Pinnacle + Novig + ProphetX share the sharp slot)
+  const weighted = weightedFairProbWithSharps(devigProbs, SHARP_BOOKS);
+
+  const pinnacleUsed = offers.some((o) => o.bookKey === "pinnacle");
+  const sharpCount = offers.filter((o) => SHARP_BOOKS.has(o.bookKey)).length;
 
   return {
     raw: buildFairEstimate(rawAvg, bestAmerican),
     devig: buildFairEstimate(devigAvg, bestAmerican),
     weighted: buildFairEstimate(weighted.fairProb, bestAmerican),
-    pinnacleUsed: weighted.pinnacleUsed,
+    pinnacleUsed,
+    sharpCount,
   };
 }
 
@@ -175,6 +246,7 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
   const plays: PlayProw[] = [];
   if (!event.bookmakers || event.bookmakers.length === 0) return plays;
 
+  // Collect every (player, line) combo seen across any book
   const combos = new Set<string>();
   for (const bm of event.bookmakers) {
     if (!TARGET_BOOKS.has(bm.key)) continue;
@@ -191,18 +263,27 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
     const [player, lineStr] = combo.split("|||");
     const line = Number(lineStr);
     const offers = buildBookOffers(event.bookmakers, player, line);
-    if (offers.length < 2) continue;
+    if (offers.length < 2) continue; // need at least 2 books to de-vig + average
 
-    // Best book per side (highest American = best payout)
-    const bestOverOffer = offers.reduce((best, cur) =>
-      cur.overAmerican > best.overAmerican ? cur : best
+    // Best price per side across ALL books (used for "All Books" view)
+    const bestOverOffer = offers.reduce((b, c) =>
+      c.overAmerican > b.overAmerican ? c : b
     );
-    const bestUnderOffer = offers.reduce((best, cur) =>
-      cur.underAmerican > best.underAmerican ? cur : best
+    const bestUnderOffer = offers.reduce((b, c) =>
+      c.underAmerican > b.underAmerican ? c : b
     );
 
     const overFair = computeAllFair(offers, "Over", bestOverOffer.overAmerican);
     const underFair = computeAllFair(offers, "Under", bestUnderOffer.underAmerican);
+
+    // Per-book prices snapshot — used by the UI to compute single-book EV
+    // without needing another API call.
+    const allBookOffers = offers.map((o) => ({
+      bookKey: o.bookKey,
+      bookTitle: o.bookTitle,
+      overAmerican: o.overAmerican,
+      underAmerican: o.underAmerican,
+    }));
 
     plays.push({
       player,
@@ -215,10 +296,13 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
       marketAvgDevig: overFair.devig,
       pinnacleWeighted: overFair.weighted,
       bestBook: bestOverOffer.bookTitle,
+      bestBookKey: bestOverOffer.bookKey,
       bestAmerican: bestOverOffer.overAmerican,
       bestDecimal: americanToDecimal(bestOverOffer.overAmerican),
       numBooks: offers.length,
       pinnacleUsed: overFair.pinnacleUsed,
+      sharpCount: overFair.sharpCount,
+      allBookOffers,
     });
 
     plays.push({
@@ -232,10 +316,13 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
       marketAvgDevig: underFair.devig,
       pinnacleWeighted: underFair.weighted,
       bestBook: bestUnderOffer.bookTitle,
+      bestBookKey: bestUnderOffer.bookKey,
       bestAmerican: bestUnderOffer.underAmerican,
       bestDecimal: americanToDecimal(bestUnderOffer.underAmerican),
       numBooks: offers.length,
       pinnacleUsed: underFair.pinnacleUsed,
+      sharpCount: underFair.sharpCount,
+      allBookOffers,
     });
   }
 
@@ -256,8 +343,8 @@ export async function getEVPlays(apiKey: string): Promise<OddsApiResult> {
   let lastRemaining: string | null = null;
   let lastUsed: string | null = null;
 
-  // Batch concurrency: 4 requests in flight at a time, with a small gap
-  // between batches. Prevents 429 EXCEEDED_FREQ_LIMIT errors.
+  // Batch concurrency: 4 in flight, 250ms gap between batches.
+  // Prevents 429 EXCEEDED_FREQ_LIMIT errors.
   const BATCH_SIZE = 4;
   const BATCH_GAP_MS = 250;
 
@@ -278,18 +365,18 @@ export async function getEVPlays(apiKey: string): Promise<OddsApiResult> {
       if (remaining !== null) lastRemaining = remaining;
       if (used !== null) lastUsed = used;
       if (!data) return;
-      const plays = buildPlaysForEvent(data);
-      allPlays.push(...plays);
+      allPlays.push(...buildPlaysForEvent(data));
     });
 
-    // Small pause between batches if we have more to do
     if (i + BATCH_SIZE < upcoming.length) {
       await new Promise((r) => setTimeout(r, BATCH_GAP_MS));
     }
   }
 
-  // Default sort: by Pinnacle-weighted EV descending
-  allPlays.sort((a, b) => b.pinnacleWeighted.evPercent - a.pinnacleWeighted.evPercent);
+  // Default sort by sharp-pool-weighted EV descending
+  allPlays.sort(
+    (a, b) => b.pinnacleWeighted.evPercent - a.pinnacleWeighted.evPercent
+  );
 
   return {
     plays: allPlays,
