@@ -17,7 +17,10 @@ type Method = "marketAvgRaw" | "marketAvgDevig" | "pinnacleWeighted";
 type SortKey =
   | "ev"
   | "player"
+  | "side"
   | "line"
+  | "game"
+  | "bestBook"
   | "bestAmerican"
   | "delta"
   | "books"
@@ -165,8 +168,17 @@ export default function Home() {
         case "player":
           cmp = a.player.localeCompare(b.player);
           break;
+        case "side":
+          cmp = a.side.localeCompare(b.side);
+          break;
         case "line":
           cmp = a.line - b.line;
+          break;
+        case "game":
+          cmp = a.game.localeCompare(b.game);
+          break;
+        case "bestBook":
+          cmp = a.bestBook.localeCompare(b.bestBook);
           break;
         case "bestAmerican":
           cmp = a.bestAmerican - b.bestAmerican;
@@ -195,11 +207,12 @@ export default function Home() {
     return plays;
   }, [data, filters, sortKey, sortDir, sortMethod]);
 
+  const ALPHA_KEYS: SortKey[] = ["player", "side", "game", "bestBook"];
   const setSort = (k: SortKey) => {
     if (k === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else {
       setSortKey(k);
-      setSortDir(k === "player" ? "asc" : "desc");
+      setSortDir(ALPHA_KEYS.includes(k) ? "asc" : "desc");
     }
   };
 
@@ -298,12 +311,18 @@ export default function Home() {
               <Th onClick={() => setSort("player")}>
                 Player{sortIndicator("player")}
               </Th>
-              <Th>Side</Th>
+              <Th onClick={() => setSort("side")}>
+                Side{sortIndicator("side")}
+              </Th>
               <Th onClick={() => setSort("line")}>
                 Line{sortIndicator("line")}
               </Th>
-              <Th>Game</Th>
-              <Th>Best Book</Th>
+              <Th onClick={() => setSort("game")}>
+                Game{sortIndicator("game")}
+              </Th>
+              <Th onClick={() => setSort("bestBook")}>
+                Best Book{sortIndicator("bestBook")}
+              </Th>
               <Th onClick={() => setSort("bestAmerican")}>
                 Best Odds{sortIndicator("bestAmerican")}
               </Th>
