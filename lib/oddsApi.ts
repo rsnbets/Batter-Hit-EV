@@ -16,7 +16,14 @@ import {
 
 const BASE = "https://api.the-odds-api.com/v4";
 const SPORT = "baseball_mlb";
-const MARKET = "batter_hits";
+// Pull both the standard market and the alternate-line market.
+// Some books (FanDuel, Caesars/williamhill_us, Kalshi, MyBookie, Rebet)
+// only post hits props in the alternate market — and often only one side.
+const MARKETS = "batter_hits,batter_hits_alternate";
+const MARKET_KEYS = new Set(["batter_hits", "batter_hits_alternate"]);
+// Stored on the play row so the UI can still show a single market label.
+// Use the standard key when both are present.
+const MARKET_LABEL = "batter_hits";
 
 // Regions:
 //   us  - DraftKings, FanDuel, BetMGM, Caesars (paid), BetRivers, BetUS, Bovada, etc.
@@ -122,7 +129,7 @@ async function fetchEventOdds(
 ): Promise<{ data: OddsApiEvent | null; remaining: string | null; used: string | null }> {
   const url =
     `${BASE}/sports/${SPORT}/events/${eventId}/odds` +
-    `?apiKey=${apiKey}&regions=${REGIONS}&markets=${MARKET}&oddsFormat=american`;
+    `?apiKey=${apiKey}&regions=${REGIONS}&markets=${MARKETS}&oddsFormat=american`;
   const res = await fetch(url, { cache: "no-store" });
   const remaining = res.headers.get("x-requests-remaining");
   const used = res.headers.get("x-requests-used");
@@ -145,43 +152,74 @@ async function fetchEventOdds(
   return { data: await res.json(), remaining, used };
 }
 
+interface PerBookSides {
+  bookKey: string;
+  bookTitle: string;
+  over: number | null;
+  under: number | null;
+}
+
 /**
- * Build per-book offers (paired Over/Under at the same line) for a given player.
- * Excludes books that don't have BOTH sides — we need both to de-vig.
+ * Collect each book's Over and Under at the given (player, line),
+ * looking across BOTH the standard `batter_hits` market and the
+ * `batter_hits_alternate` market. A book may quote in either or both.
  *
- * Special handling for exchanges (Novig, BetOpenly): these may not always have
- * both sides liquid. We still include them if both sides are present.
+ * If a book quotes the same side in both markets, we keep the standard
+ * market's price (more reliable; alts are sometimes stale).
  */
-function buildBookOffers(
+function collectPerBookSides(
   bookmakers: OddsApiBookmaker[],
   player: string,
   line: number
-): BookOffer[] {
-  const offers: BookOffer[] = [];
+): PerBookSides[] {
+  const out: PerBookSides[] = [];
   for (const bm of bookmakers) {
     if (!TARGET_BOOKS.has(bm.key)) continue;
-    const market = bm.markets.find((m) => m.key === MARKET);
-    if (!market) continue;
-    const over = market.outcomes.find(
-      (o) => o.name === "Over" && o.description === player && o.point === line
-    );
-    const under = market.outcomes.find(
-      (o) => o.name === "Under" && o.description === player && o.point === line
-    );
-    if (!over || !under) continue; // need both sides to de-vig
+    let over: number | null = null;
+    let under: number | null = null;
+    let overFromStandard = false;
+    let underFromStandard = false;
+    for (const m of bm.markets) {
+      if (!MARKET_KEYS.has(m.key)) continue;
+      const isStandard = m.key === "batter_hits";
+      for (const o of m.outcomes) {
+        if (o.description !== player || o.point !== line) continue;
+        if (o.name === "Over" && (over === null || (isStandard && !overFromStandard))) {
+          over = o.price;
+          overFromStandard = isStandard;
+        } else if (o.name === "Under" && (under === null || (isStandard && !underFromStandard))) {
+          under = o.price;
+          underFromStandard = isStandard;
+        }
+      }
+    }
+    if (over !== null || under !== null) {
+      out.push({ bookKey: bm.key, bookTitle: bm.title, over, under });
+    }
+  }
+  return out;
+}
 
-    const overImplied = americanToImplied(over.price);
-    const underImplied = americanToImplied(under.price);
+/**
+ * Build de-viggable two-sided offers from per-book outcomes.
+ * Books with only one side are excluded here (they're tracked separately
+ * in PerBookSides for display + best-price purposes).
+ */
+function buildDevigOffers(perBook: PerBookSides[]): BookOffer[] {
+  const offers: BookOffer[] = [];
+  for (const b of perBook) {
+    if (b.over === null || b.under === null) continue;
+    const overImplied = americanToImplied(b.over);
+    const underImplied = americanToImplied(b.under);
     const { over: overDevig, under: underDevig } = devigPower(
       overImplied,
       underImplied
     );
-
     offers.push({
-      bookKey: bm.key,
-      bookTitle: bm.title,
-      overAmerican: over.price,
-      underAmerican: under.price,
+      bookKey: b.bookKey,
+      bookTitle: b.bookTitle,
+      overAmerican: b.over,
+      underAmerican: b.under,
       overImplied,
       underImplied,
       overDevigged: overDevig,
@@ -246,14 +284,15 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
   const plays: PlayProw[] = [];
   if (!event.bookmakers || event.bookmakers.length === 0) return plays;
 
-  // Collect every (player, line) combo seen across any book
+  // Collect every (player, line) combo seen across either market and any book
   const combos = new Set<string>();
   for (const bm of event.bookmakers) {
     if (!TARGET_BOOKS.has(bm.key)) continue;
-    const market = bm.markets.find((m) => m.key === MARKET);
-    if (!market) continue;
-    for (const o of market.outcomes) {
-      combos.add(`${o.description}|||${o.point}`);
+    for (const m of bm.markets) {
+      if (!MARKET_KEYS.has(m.key)) continue;
+      for (const o of m.outcomes) {
+        combos.add(`${o.description}|||${o.point}`);
+      }
     }
   }
 
@@ -262,32 +301,54 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
   for (const combo of combos) {
     const [player, lineStr] = combo.split("|||");
     const line = Number(lineStr);
-    const offers = buildBookOffers(event.bookmakers, player, line);
-    if (offers.length < 2) continue; // need at least 2 books to de-vig + average
 
-    // Best price per side across ALL books (used for "All Books" view)
-    const bestOverOffer = offers.reduce((b, c) =>
-      c.overAmerican > b.overAmerican ? c : b
-    );
-    const bestUnderOffer = offers.reduce((b, c) =>
-      c.underAmerican > b.underAmerican ? c : b
-    );
+    const perBook = collectPerBookSides(event.bookmakers, player, line);
+    const devigOffers = buildDevigOffers(perBook);
+    if (devigOffers.length < 2) continue; // need ≥ 2 two-sided books to de-vig
 
-    const overFair = computeAllFair(offers, "Over", bestOverOffer.overAmerican);
-    const underFair = computeAllFair(offers, "Under", bestUnderOffer.underAmerican);
-
-    // Per-book prices snapshot — used by the UI to compute single-book EV
-    // without needing another API call.
-    const allBookOffers = offers.map((o) => ({
-      bookKey: o.bookKey,
-      bookTitle: o.bookTitle,
-      overAmerican: o.overAmerican,
-      underAmerican: o.underAmerican,
+    // Build a snapshot covering ALL books (de-vig + one-sided) for display.
+    const devigKeys = new Set(devigOffers.map((o) => o.bookKey));
+    const allBookOffers = perBook.map((b) => ({
+      bookKey: b.bookKey,
+      bookTitle: b.bookTitle,
+      overAmerican: b.over,
+      underAmerican: b.under,
+      devigged: devigKeys.has(b.bookKey),
     }));
+
+    // Best Over: max across every book that quoted an Over (de-vig or one-sided)
+    let bestOverPrice = -Infinity;
+    let bestOverBookKey = "";
+    let bestOverBookTitle = "";
+    for (const b of perBook) {
+      if (b.over !== null && b.over > bestOverPrice) {
+        bestOverPrice = b.over;
+        bestOverBookKey = b.bookKey;
+        bestOverBookTitle = b.bookTitle;
+      }
+    }
+    // Best Under: same idea
+    let bestUnderPrice = -Infinity;
+    let bestUnderBookKey = "";
+    let bestUnderBookTitle = "";
+    for (const b of perBook) {
+      if (b.under !== null && b.under > bestUnderPrice) {
+        bestUnderPrice = b.under;
+        bestUnderBookKey = b.bookKey;
+        bestUnderBookTitle = b.bookTitle;
+      }
+    }
+
+    const overFair = computeAllFair(devigOffers, "Over", bestOverPrice);
+    const underFair = computeAllFair(devigOffers, "Under", bestUnderPrice);
+
+    // Counts: numBooks = anyone quoting that side; numDevigBooks = the de-vig pool size.
+    const numOverBooks = perBook.filter((b) => b.over !== null).length;
+    const numUnderBooks = perBook.filter((b) => b.under !== null).length;
 
     plays.push({
       player,
-      market: MARKET,
+      market: MARKET_LABEL,
       line,
       side: "Over",
       game,
@@ -295,11 +356,12 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
       marketAvgRaw: overFair.raw,
       marketAvgDevig: overFair.devig,
       pinnacleWeighted: overFair.weighted,
-      bestBook: bestOverOffer.bookTitle,
-      bestBookKey: bestOverOffer.bookKey,
-      bestAmerican: bestOverOffer.overAmerican,
-      bestDecimal: americanToDecimal(bestOverOffer.overAmerican),
-      numBooks: offers.length,
+      bestBook: bestOverBookTitle,
+      bestBookKey: bestOverBookKey,
+      bestAmerican: bestOverPrice,
+      bestDecimal: americanToDecimal(bestOverPrice),
+      numBooks: numOverBooks,
+      numDevigBooks: devigOffers.length,
       pinnacleUsed: overFair.pinnacleUsed,
       sharpCount: overFair.sharpCount,
       allBookOffers,
@@ -307,7 +369,7 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
 
     plays.push({
       player,
-      market: MARKET,
+      market: MARKET_LABEL,
       line,
       side: "Under",
       game,
@@ -315,11 +377,12 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
       marketAvgRaw: underFair.raw,
       marketAvgDevig: underFair.devig,
       pinnacleWeighted: underFair.weighted,
-      bestBook: bestUnderOffer.bookTitle,
-      bestBookKey: bestUnderOffer.bookKey,
-      bestAmerican: bestUnderOffer.underAmerican,
-      bestDecimal: americanToDecimal(bestUnderOffer.underAmerican),
-      numBooks: offers.length,
+      bestBook: bestUnderBookTitle,
+      bestBookKey: bestUnderBookKey,
+      bestAmerican: bestUnderPrice,
+      bestDecimal: americanToDecimal(bestUnderPrice),
+      numBooks: numUnderBooks,
+      numDevigBooks: devigOffers.length,
       pinnacleUsed: underFair.pinnacleUsed,
       sharpCount: underFair.sharpCount,
       allBookOffers,

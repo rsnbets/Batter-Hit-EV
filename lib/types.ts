@@ -43,8 +43,12 @@ export interface BookOffer {
 export interface BookOfferSnapshot {
   bookKey: string;
   bookTitle: string;
-  overAmerican: number;
-  underAmerican: number;
+  // null = book did not quote that side at this line (only happens for
+  // one-sided alternate-market entries from books like FanDuel/Caesars)
+  overAmerican: number | null;
+  underAmerican: number | null;
+  // true if this book contributed to the de-vig fair calc (had both sides)
+  devigged: boolean;
 }
 
 /**
@@ -76,10 +80,12 @@ export interface PlayProw {
   bestAmerican: number;
   bestDecimal: number;
 
-  numBooks: number;
+  numBooks: number;        // total books quoting this side (de-vig + one-sided)
+  numDevigBooks: number;   // subset that contributed to the de-vig fair calc
   pinnacleUsed: boolean;
   sharpCount: number;
 
   // Per-book snapshot — used for "Single Book" / target-book EV mode in the UI
+  // Includes both two-sided and one-sided offers (with null for missing side).
   allBookOffers: BookOfferSnapshot[];
 }

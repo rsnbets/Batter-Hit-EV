@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { Fragment, useEffect, useState, useMemo } from "react";
 import type { PlayProw } from "@/lib/types";
 
 interface ApiResponse {
@@ -70,6 +70,7 @@ export default function Home() {
   const [sortKey, setSortKey] = useState<SortKey>("pinEv");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filters, setFilters] = useState<ColFilters>(EMPTY_FILTERS);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const setF = <K extends keyof ColFilters>(key: K, value: ColFilters[K]) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -472,62 +473,93 @@ export default function Home() {
             )}
             {filteredPlays.map((p, i) => {
               const delta = playWithDelta(p);
+              const rowKey = `${p.player}-${p.line}-${p.side}-${i}`;
+              const expanded = expandedKey === rowKey;
+              const extras = p.numBooks - p.numDevigBooks;
               return (
-                <tr
-                  key={`${p.player}-${p.line}-${p.side}-${i}`}
-                  className="border-t border-neutral-800 hover:bg-neutral-900/60"
-                >
-                  <Td className="font-medium">{p.player}</Td>
-                  <Td>
-                    <span
-                      className={
-                        p.side === "Over" ? "text-sky-400" : "text-orange-400"
-                      }
-                    >
-                      {p.side}
-                    </span>
-                  </Td>
-                  <Td>{p.line}</Td>
-                  <Td className="text-neutral-400 text-xs">{p.game}</Td>
-                  <Td>
-                    {p.bestBook}
-                    {p.pinnacleUsed && (
-                      <span
-                        title="Pinnacle was available and used in pin-weighted calc"
-                        className="ml-1 text-emerald-500"
-                      >
-                        ★
+                <Fragment key={rowKey}>
+                  <tr
+                    onClick={() => setExpandedKey(expanded ? null : rowKey)}
+                    className={`border-t border-neutral-800 cursor-pointer hover:bg-neutral-900/60 ${
+                      expanded ? "bg-neutral-900/40" : ""
+                    }`}
+                    title="Click to see all books for this line"
+                  >
+                    <Td className="font-medium">
+                      <span className="text-neutral-500 mr-1 select-none">
+                        {expanded ? "▾" : "▸"}
                       </span>
-                    )}
-                  </Td>
-                  <Td className="font-medium">{fmtAmerican(p.bestAmerican)}</Td>
+                      {p.player}
+                    </Td>
+                    <Td>
+                      <span
+                        className={
+                          p.side === "Over" ? "text-sky-400" : "text-orange-400"
+                        }
+                      >
+                        {p.side}
+                      </span>
+                    </Td>
+                    <Td>{p.line}</Td>
+                    <Td className="text-neutral-400 text-xs">{p.game}</Td>
+                    <Td>
+                      {p.bestBook}
+                      {p.pinnacleUsed && (
+                        <span
+                          title="Pinnacle was available and used in pin-weighted calc"
+                          className="ml-1 text-emerald-500"
+                        >
+                          ★
+                        </span>
+                      )}
+                    </Td>
+                    <Td className="font-medium">{fmtAmerican(p.bestAmerican)}</Td>
 
-                  <Td className="border-l border-neutral-800 text-right text-neutral-300">
-                    {fmtAmerican(p.marketAvgRaw.fairAmerican)}
-                  </Td>
-                  <Td className="text-right">
-                    <EvCell ev={p.marketAvgRaw.evPercent} />
-                  </Td>
+                    <Td className="border-l border-neutral-800 text-right text-neutral-300">
+                      {fmtAmerican(p.marketAvgRaw.fairAmerican)}
+                    </Td>
+                    <Td className="text-right">
+                      <EvCell ev={p.marketAvgRaw.evPercent} />
+                    </Td>
 
-                  <Td className="border-l border-neutral-800 text-right text-neutral-300">
-                    {fmtAmerican(p.marketAvgDevig.fairAmerican)}
-                  </Td>
-                  <Td className="text-right">
-                    <EvCell ev={p.marketAvgDevig.evPercent} />
-                  </Td>
+                    <Td className="border-l border-neutral-800 text-right text-neutral-300">
+                      {fmtAmerican(p.marketAvgDevig.fairAmerican)}
+                    </Td>
+                    <Td className="text-right">
+                      <EvCell ev={p.marketAvgDevig.evPercent} />
+                    </Td>
 
-                  <Td className="border-l border-neutral-800 text-right bg-emerald-950/20 text-neutral-200">
-                    {fmtAmerican(p.pinnacleWeighted.fairAmerican)}
-                  </Td>
-                  <Td className="text-right bg-emerald-950/20 font-bold">
-                    <EvCell ev={p.pinnacleWeighted.evPercent} />
-                  </Td>
+                    <Td className="border-l border-neutral-800 text-right bg-emerald-950/20 text-neutral-200">
+                      {fmtAmerican(p.pinnacleWeighted.fairAmerican)}
+                    </Td>
+                    <Td className="text-right bg-emerald-950/20 font-bold">
+                      <EvCell ev={p.pinnacleWeighted.evPercent} />
+                    </Td>
 
-                  <Td className="border-l border-neutral-800 text-right text-neutral-400 text-xs">
-                    {(delta * 100).toFixed(1)}%
-                  </Td>
-                  <Td className="text-neutral-500 text-xs">{p.numBooks}</Td>
-                </tr>
+                    <Td className="border-l border-neutral-800 text-right text-neutral-400 text-xs">
+                      {(delta * 100).toFixed(1)}%
+                    </Td>
+                    <Td
+                      className="text-neutral-500 text-xs"
+                      title={`${p.numDevigBooks} de-vig + ${extras} one-sided`}
+                    >
+                      {p.numBooks}
+                      {extras > 0 && (
+                        <span className="text-amber-500/70">+{extras}</span>
+                      )}
+                    </Td>
+                  </tr>
+                  {expanded && (
+                    <tr className="bg-neutral-950">
+                      <td
+                        colSpan={14}
+                        className="px-3 py-3 border-t border-neutral-800"
+                      >
+                        <BookBreakdown play={p} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -585,11 +617,17 @@ function Th({
 function Td({
   children,
   className = "",
+  title,
 }: {
   children: React.ReactNode;
   className?: string;
+  title?: string;
 }) {
-  return <td className={`px-3 py-2 ${className}`}>{children}</td>;
+  return (
+    <td className={`px-3 py-2 ${className}`} title={title}>
+      {children}
+    </td>
+  );
 }
 
 function FilterTd({
@@ -657,7 +695,82 @@ function EvCell({ ev }: { ev: number }) {
   return <span className={cls}>{sign}{pct.toFixed(2)}%</span>;
 }
 
-function fmtAmerican(n: number): string {
-  if (!Number.isFinite(n)) return "—";
+function fmtAmerican(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "—";
   return n > 0 ? `+${n}` : String(n);
+}
+
+function BookBreakdown({ play }: { play: PlayProw }) {
+  const isOver = play.side === "Over";
+  // Sort by the side this row is for (best at top), then by book name
+  const offers = [...play.allBookOffers].sort((a, b) => {
+    const av = isOver ? a.overAmerican : a.underAmerican;
+    const bv = isOver ? b.overAmerican : b.underAmerican;
+    const aHas = av !== null;
+    const bHas = bv !== null;
+    if (aHas && !bHas) return -1;
+    if (!aHas && bHas) return 1;
+    if (aHas && bHas && av !== bv) return (bv as number) - (av as number);
+    return a.bookTitle.localeCompare(b.bookTitle);
+  });
+  return (
+    <div>
+      <div className="text-xs text-neutral-400 mb-2">
+        {play.player} — {play.side} {play.line} —{" "}
+        <span className="text-neutral-500">
+          {play.numDevigBooks} books de-vigged, {play.numBooks - play.numDevigBooks} one-sided
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="text-xs border-collapse">
+          <thead className="text-neutral-500">
+            <tr>
+              <th className="text-left pr-6 pb-1">Book</th>
+              <th className="text-right pr-6 pb-1">Over</th>
+              <th className="text-right pr-6 pb-1">Under</th>
+              <th className="text-left pl-2 pb-1">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {offers.map((o) => {
+              const sideHighlight = isOver
+                ? o.overAmerican === play.bestAmerican
+                : o.underAmerican === play.bestAmerican;
+              return (
+                <tr
+                  key={o.bookKey}
+                  className="border-t border-neutral-800/60"
+                >
+                  <td
+                    className={`pr-6 py-0.5 ${
+                      sideHighlight ? "text-emerald-400 font-semibold" : "text-neutral-300"
+                    }`}
+                  >
+                    {o.bookTitle}
+                  </td>
+                  <td
+                    className={`text-right pr-6 py-0.5 ${
+                      isOver && sideHighlight ? "text-emerald-400 font-semibold" : "text-neutral-300"
+                    }`}
+                  >
+                    {fmtAmerican(o.overAmerican)}
+                  </td>
+                  <td
+                    className={`text-right pr-6 py-0.5 ${
+                      !isOver && sideHighlight ? "text-emerald-400 font-semibold" : "text-neutral-300"
+                    }`}
+                  >
+                    {fmtAmerican(o.underAmerican)}
+                  </td>
+                  <td className="pl-2 py-0.5 text-neutral-500">
+                    {o.devigged ? "de-vig" : "one-sided"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
