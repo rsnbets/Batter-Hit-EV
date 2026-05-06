@@ -68,6 +68,7 @@ export interface PlayProw {
   side: "Over" | "Under";
   game: string;
   commenceTime: string;
+  eventId: string;
 
   // Three fair-odds estimates
   marketAvgRaw: FairEstimate;       // current method: plain avg of raw implied probs (vig in)
@@ -88,4 +89,45 @@ export interface PlayProw {
   // Per-book snapshot — used for "Single Book" / target-book EV mode in the UI
   // Includes both two-sided and one-sided offers (with null for missing side).
   allBookOffers: BookOfferSnapshot[];
+}
+
+// CLV tracking
+
+export interface BetRow {
+  id: string;
+  created_at: string;
+
+  player: string;
+  market: string;
+  line: number;
+  side: "Over" | "Under";
+
+  bet_book_key: string;
+  bet_book_title: string;
+  bet_american: number;
+  stake: number;
+
+  event_id: string;
+  game: string;
+  commence_time: string;
+
+  fair_devigged_american: number | null;
+  fair_pinnacle_weighted_american: number | null;
+  ev_at_bet_pct: number | null;
+
+  closing_captured_at: string | null;
+  close_best_book: string | null;
+  close_best_american: number | null;
+  close_pinnacle_american: number | null;
+  close_sharp_consensus_american: number | null;
+  close_devigged_market_american: number | null;
+
+  result: "win" | "loss" | "push" | "void" | null;
+}
+
+export interface BetWithCLV extends BetRow {
+  clv_vs_best_pct: number | null;
+  clv_vs_pinnacle_pct: number | null;
+  clv_vs_sharp_consensus_pct: number | null;
+  clv_vs_devigged_market_pct: number | null;
 }

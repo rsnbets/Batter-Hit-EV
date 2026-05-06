@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useEffect, useState, useMemo } from "react";
 import type { PlayProw } from "@/lib/types";
 
@@ -71,6 +72,7 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filters, setFilters] = useState<ColFilters>(EMPTY_FILTERS);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [trackPlay, setTrackPlay] = useState<PlayProw | null>(null);
   // Tracks remaining credits at the moment the page was first loaded so we
   // can show "credits used this session". Set on the first successful load.
   const [sessionStartCredits, setSessionStartCredits] = useState<number | null>(
@@ -242,13 +244,21 @@ export default function Home() {
 
   return (
     <main className="max-w-[1400px] mx-auto p-4 sm:p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-          MLB Batter Hits — +EV Finder
-        </h1>
-        <p className="text-sm text-neutral-400 mt-1">
-          Three fair-odds methods side-by-side. Compare and pick what works for you.
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            MLB Batter Hits — +EV Finder
+          </h1>
+          <p className="text-sm text-neutral-400 mt-1">
+            Three fair-odds methods side-by-side. Compare and pick what works for you.
+          </p>
+        </div>
+        <Link
+          href="/bets"
+          className="text-sm text-emerald-400 hover:text-emerald-300"
+        >
+          View Bet Log →
+        </Link>
       </header>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -393,6 +403,7 @@ export default function Home() {
               <Th onClick={() => setSort("books")}>
                 Books{sortIndicator("books")}
               </Th>
+              <Th>Track</Th>
             </tr>
             {/* Per-column filter row */}
             <tr className="bg-neutral-950 border-t border-neutral-800">
@@ -505,12 +516,13 @@ export default function Home() {
                   placeholder="≥ #"
                 />
               </FilterTd>
+              <FilterTd />
             </tr>
           </thead>
           <tbody>
             {filteredPlays.length === 0 && !loading && (
               <tr>
-                <td colSpan={14} className="text-center text-neutral-500 py-8">
+                <td colSpan={15} className="text-center text-neutral-500 py-8">
                   {data
                     ? activeFilterCount > 0
                       ? "No rows match your column filters. Clear some filters to see more."
@@ -596,11 +608,22 @@ export default function Home() {
                         <span className="text-amber-500/70">+{extras}</span>
                       )}
                     </Td>
+                    <Td>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTrackPlay(p);
+                        }}
+                        className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-600 rounded text-xs font-medium"
+                      >
+                        Track
+                      </button>
+                    </Td>
                   </tr>
                   {expanded && (
                     <tr className="bg-neutral-950">
                       <td
-                        colSpan={14}
+                        colSpan={15}
                         className="px-3 py-3 border-t border-neutral-800"
                       >
                         <BookBreakdown play={p} />
@@ -634,7 +657,177 @@ export default function Home() {
           ★ = Pinnacle was available and included in the Pin-weighted calc.
         </p>
       </div>
+
+      {trackPlay && (
+        <TrackModal
+          play={trackPlay}
+          onClose={() => setTrackPlay(null)}
+        />
+      )}
     </main>
+  );
+}
+
+function TrackModal({
+  play,
+  onClose,
+}: {
+  play: PlayProw;
+  onClose: () => void;
+}) {
+  // Books that quoted this side at this line — what the user could realistically
+  // have bet at. Sorted best price first.
+  const offers = useMemo(() => {
+    const isOver = play.side === "Over";
+    return play.allBookOffers
+      .map((o) => ({
+        bookKey: o.bookKey,
+        bookTitle: o.bookTitle,
+        american: isOver ? o.overAmerican : o.underAmerican,
+      }))
+      .filter((o): o is { bookKey: string; bookTitle: string; american: number } => o.american !== null)
+      .sort((a, b) => b.american - a.american);
+  }, [play]);
+
+  const [bookKey, setBookKey] = useState(play.bestBookKey);
+  const [american, setAmerican] = useState<number>(play.bestAmerican);
+  const [stake, setStake] = useState<number>(1);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const onBookChange = (key: string) => {
+    setBookKey(key);
+    const match = offers.find((o) => o.bookKey === key);
+    if (match) setAmerican(match.american);
+  };
+
+  const submit = async () => {
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const book = offers.find((o) => o.bookKey === bookKey);
+      if (!book) throw new Error("Book not found");
+      const res = await fetch("/api/bets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          player: play.player,
+          line: play.line,
+          side: play.side,
+          bet_book_key: book.bookKey,
+          bet_book_title: book.bookTitle,
+          bet_american: american,
+          stake,
+          event_id: play.eventId,
+          game: play.game,
+          commence_time: play.commenceTime,
+          fair_devigged_american: play.marketAvgDevig.fairAmerican,
+          fair_pinnacle_weighted_american: play.pinnacleWeighted.fairAmerican,
+          ev_at_bet_pct: play.pinnacleWeighted.evPercent,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || `HTTP ${res.status}`);
+      setDone(true);
+      setTimeout(onClose, 900);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-neutral-950 border border-neutral-800 rounded-lg p-5 max-w-md w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <h2 className="text-lg font-semibold">Track bet</h2>
+            <p className="text-xs text-neutral-400 mt-0.5">
+              {play.player} — {play.side} {play.line}
+            </p>
+            <p className="text-xs text-neutral-500">{play.game}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-neutral-500 hover:text-neutral-300 text-xl leading-none"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <div className="text-xs text-neutral-400 mb-1">Book</div>
+            <select
+              value={bookKey}
+              onChange={(e) => onBookChange(e.target.value)}
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm"
+            >
+              {offers.map((o) => (
+                <option key={o.bookKey} value={o.bookKey}>
+                  {o.bookTitle} ({o.american > 0 ? `+${o.american}` : o.american})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <div className="text-xs text-neutral-400 mb-1">
+              American odds (override if you got a different price)
+            </div>
+            <input
+              type="number"
+              value={american}
+              onChange={(e) => setAmerican(Number(e.target.value))}
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm"
+            />
+          </label>
+
+          <label className="block">
+            <div className="text-xs text-neutral-400 mb-1">Stake (units)</div>
+            <input
+              type="number"
+              step="0.1"
+              value={stake}
+              onChange={(e) => setStake(Number(e.target.value))}
+              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm"
+            />
+          </label>
+        </div>
+
+        {err && (
+          <div className="mt-3 bg-red-950/60 border border-red-800 text-red-200 rounded p-2 text-xs">
+            {err}
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded text-sm"
+            disabled={submitting}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting || done}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded text-sm font-medium"
+          >
+            {done ? "Tracked ✓" : submitting ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -682,7 +875,7 @@ function FilterTd({
   children,
   className = "",
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
 }) {
   return <td className={`px-2 py-1 align-middle ${className}`}>{children}</td>;
