@@ -13,9 +13,7 @@ interface ApiResponse {
   error?: string;
 }
 
-type Method = "marketAvgRaw" | "marketAvgDevig" | "pinnacleWeighted";
 type SortKey =
-  | "ev"
   | "player"
   | "side"
   | "line"
@@ -28,13 +26,8 @@ type SortKey =
   | "rawEv"
   | "devigFair"
   | "devigEv"
-  | "pinFair";
-
-const METHOD_LABELS: Record<Method, string> = {
-  marketAvgRaw: "Market Avg (raw)",
-  marketAvgDevig: "Market Avg (de-vigged)",
-  pinnacleWeighted: "Pinnacle-weighted",
-};
+  | "pinFair"
+  | "pinEv";
 
 interface ColFilters {
   player: string;
@@ -74,8 +67,7 @@ export default function Home() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [sortMethod, setSortMethod] = useState<Method>("pinnacleWeighted");
-  const [sortKey, setSortKey] = useState<SortKey>("ev");
+  const [sortKey, setSortKey] = useState<SortKey>("pinEv");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filters, setFilters] = useState<ColFilters>(EMPTY_FILTERS);
 
@@ -159,9 +151,6 @@ export default function Home() {
     plays = [...plays].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
-        case "ev":
-          cmp = a[sortMethod].evPercent - b[sortMethod].evPercent;
-          break;
         case "delta":
           cmp = playWithDelta(a) - playWithDelta(b);
           break;
@@ -201,11 +190,14 @@ export default function Home() {
         case "pinFair":
           cmp = a.pinnacleWeighted.fairAmerican - b.pinnacleWeighted.fairAmerican;
           break;
+        case "pinEv":
+          cmp = a.pinnacleWeighted.evPercent - b.pinnacleWeighted.evPercent;
+          break;
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
     return plays;
-  }, [data, filters, sortKey, sortDir, sortMethod]);
+  }, [data, filters, sortKey, sortDir]);
 
   const ALPHA_KEYS: SortKey[] = ["player", "side", "game", "bestBook"];
   const setSort = (k: SortKey) => {
@@ -250,19 +242,6 @@ export default function Home() {
         >
           {loading ? "Loading…" : "Refresh"}
         </button>
-
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-neutral-400">Sort EV by</span>
-          <select
-            value={sortMethod}
-            onChange={(e) => setSortMethod(e.target.value as Method)}
-            className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1"
-          >
-            <option value="pinnacleWeighted">{METHOD_LABELS.pinnacleWeighted}</option>
-            <option value="marketAvgDevig">{METHOD_LABELS.marketAvgDevig}</option>
-            <option value="marketAvgRaw">{METHOD_LABELS.marketAvgRaw}</option>
-          </select>
-        </label>
 
         <button
           onClick={clearFilters}
@@ -351,11 +330,10 @@ export default function Home() {
                 Fair: Pin-wt{sortIndicator("pinFair")}
               </Th>
               <Th
-                onClick={() => setSort("ev")}
+                onClick={() => setSort("pinEv")}
                 className="bg-emerald-950/40"
-                title="Sorted by the method chosen in 'Sort EV by'"
               >
-                EV %{sortIndicator("ev")}
+                EV %{sortIndicator("pinEv")}
               </Th>
               <Th
                 onClick={() => setSort("delta")}
