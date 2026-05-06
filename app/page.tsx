@@ -71,6 +71,11 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filters, setFilters] = useState<ColFilters>(EMPTY_FILTERS);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  // Tracks remaining credits at the moment the page was first loaded so we
+  // can show "credits used this session". Set on the first successful load.
+  const [sessionStartCredits, setSessionStartCredits] = useState<number | null>(
+    null
+  );
 
   const setF = <K extends keyof ColFilters>(key: K, value: ColFilters[K]) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -85,6 +90,17 @@ export default function Home() {
       const json: ApiResponse = await res.json();
       if (json.error) throw new Error(json.error);
       setData(json);
+      const remNum = json.remainingRequests
+        ? Number(json.remainingRequests)
+        : NaN;
+      if (
+        Number.isFinite(remNum) &&
+        sessionStartCredits === null &&
+        !json.cached
+      ) {
+        // Anchor the session counter to the first non-cached response we see.
+        setSessionStartCredits(remNum);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -254,16 +270,48 @@ export default function Home() {
         </button>
 
         {data && (
-          <div className="text-xs text-neutral-500 ml-auto">
+          <div className="text-xs text-neutral-500 ml-auto text-right">
             {data.cached ? "Cached • " : ""}
             Fetched {new Date(data.fetchedAt).toLocaleTimeString()} •{" "}
             {filteredPlays.length}/{data.plays.length} rows
-            {data.remainingRequests && (
-              <> • API credits left: {data.remainingRequests}</>
-            )}
+            {data.remainingRequests && (() => {
+              const rem = Number(data.remainingRequests);
+              const used =
+                sessionStartCredits !== null
+                  ? Math.max(0, sessionStartCredits - rem)
+                  : null;
+              const lowColor =
+                rem < 500
+                  ? "text-red-400"
+                  : rem < 2000
+                  ? "text-amber-400"
+                  : "text-neutral-500";
+              return (
+                <>
+                  {" "}• <span className={lowColor}>API credits left: {rem.toLocaleString()}</span>
+                  {used !== null && used > 0 && (
+                    <> <span className="text-neutral-600">(used {used} this session)</span></>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
+
+      {data?.remainingRequests && Number(data.remainingRequests) < 2000 && (
+        <div
+          className={`rounded p-3 mb-4 text-sm ${
+            Number(data.remainingRequests) < 500
+              ? "bg-red-950/60 border border-red-800 text-red-200"
+              : "bg-amber-950/50 border border-amber-800/60 text-amber-200"
+          }`}
+        >
+          ⚠️ Only <strong>{Number(data.remainingRequests).toLocaleString()}</strong> API credits remaining.
+          {" "}Each manual Refresh now costs ~90 credits (15 events × 3 regions × 2 markets).
+          {" "}Avoid hitting Refresh repeatedly.
+        </div>
+      )}
 
       {err && (
         <div className="bg-red-950/60 border border-red-800 text-red-200 rounded p-3 mb-4 text-sm">

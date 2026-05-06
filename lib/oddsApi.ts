@@ -28,9 +28,11 @@ const MARKET_LABEL = "batter_hits";
 // Regions:
 //   us  - DraftKings, FanDuel, BetMGM, Caesars (paid), BetRivers, BetUS, Bovada, etc.
 //   us2 - ESPN BET, Fliff, Bally Bet, betPARX, BetAnySports, Hard Rock variants
-//   eu  - Pinnacle (sharp), plus other EU books that mostly skip MLB props
 //   us_ex - Exchanges: Novig (no-vig), ProphetX, Kalshi, BetOpenly
-const REGIONS = "us,us2,eu,us_ex";
+// `eu` is intentionally dropped: Pinnacle does not post batter_hits, and the only
+// `eu` books that quote it (betonlineag, mybookieag) are also available via `us`.
+// Dropping `eu` saves ~25% of API credits per refresh with no data loss.
+const REGIONS = "us,us2,us_ex";
 
 /**
  * Books we accept into the analysis. Verified against the official Odds API
