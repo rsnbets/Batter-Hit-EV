@@ -1,9 +1,9 @@
-// All the odds math lives here.
+// All odds math lives here.
 // Conventions:
-//   - "American" odds: e.g. -110, +150
-//   - "Decimal" odds: e.g. 1.909, 2.50
-//   - "Implied prob": 0..1
-// We always go American -> implied for math, then back to American/decimal for display.
+//   - American: e.g. -110, +150
+//   - Decimal: e.g. 1.909, 2.50
+//   - Implied prob: 0..1
+// Always go American -> implied for math, then back to American/decimal for display.
 
 export function americanToDecimal(american: number): number {
   if (american > 0) return 1 + american / 100;
@@ -27,32 +27,23 @@ export function impliedToDecimal(p: number): number {
 
 /**
  * Power-method de-vig for a two-way market.
- * Given raw implied probs pOver, pUnder (which sum to >1 due to vig),
- * find exponent k such that pOver^k + pUnder^k = 1.
- * This is more accurate than simple multiplicative normalization for
- * lopsided lines (e.g. 0.5 hits at -250 / +200), where favorites are
- * under-priced and dogs over-priced by the multiplicative method.
- *
- * Solve numerically with bisection — fast and rock-solid for this domain.
+ * Find exponent k such that pOver^k + pUnder^k = 1.
+ * More accurate than multiplicative for lopsided lines (e.g. 0.5 hits at -250/+200).
+ * Solved by bisection — fast and rock-solid for this domain.
  */
 export function devigPower(
   pOver: number,
   pUnder: number
 ): { over: number; under: number } {
-  // If something is degenerate, fall back to multiplicative
   if (pOver <= 0 || pUnder <= 0 || pOver >= 1 || pUnder >= 1) {
     const total = pOver + pUnder;
     return { over: pOver / total, under: pUnder / total };
   }
 
-  // f(k) = pOver^k + pUnder^k - 1
-  // f is strictly decreasing in k for p in (0,1). At k=1, f = vig (>0).
-  // At k = large, f -> -1. So root exists in (1, kHi).
   const f = (k: number) => Math.pow(pOver, k) + Math.pow(pUnder, k) - 1;
 
   let lo = 0.5;
   let hi = 5;
-  // Expand hi if needed (extremely unlikely with real sportsbook lines)
   while (f(hi) > 0 && hi < 100) hi *= 2;
 
   for (let i = 0; i < 60; i++) {
@@ -65,8 +56,7 @@ export function devigPower(
 }
 
 /**
- * Multiplicative de-vig (simpler, included for fallback / comparison).
- * pOver / (pOver + pUnder)
+ * Multiplicative de-vig (simple normalization). Kept for fallback/comparison.
  */
 export function devigMultiplicative(
   pOver: number,
@@ -77,13 +67,8 @@ export function devigMultiplicative(
 }
 
 /**
- * Pinnacle-weighted consensus.
- * Pinnacle gets PINNACLE_WEIGHT of the total weight; remaining is split
- * evenly among other books. If Pinnacle isn't present, just average the
- * others (equal weight).
- *
- * Each input is a de-vigged probability for the SAME side (e.g. all Overs)
- * at the SAME line.
+ * Plain Pinnacle-only weighting (kept for backward compatibility).
+ * Pinnacle gets PINNACLE_WEIGHT, others split the rest evenly.
  */
 export const PINNACLE_WEIGHT = 0.5;
 
@@ -96,28 +81,78 @@ export function weightedFairProb(
   if (others.length === 0 && !pinnacle) {
     return { fairProb: NaN, pinnacleUsed: false };
   }
-
   if (!pinnacle) {
-    // Plain average of others
     const avg = others.reduce((s, b) => s + b.prob, 0) / others.length;
     return { fairProb: avg, pinnacleUsed: false };
   }
-
   if (others.length === 0) {
     return { fairProb: pinnacle.prob, pinnacleUsed: true };
   }
-
   const otherAvg = others.reduce((s, b) => s + b.prob, 0) / others.length;
-  const fair =
-    PINNACLE_WEIGHT * pinnacle.prob + (1 - PINNACLE_WEIGHT) * otherAvg;
+  const fair = PINNACLE_WEIGHT * pinnacle.prob + (1 - PINNACLE_WEIGHT) * otherAvg;
   return { fairProb: fair, pinnacleUsed: true };
 }
 
 /**
- * EV% = fairProb * decimalOdds - 1
- * Returns as percentage (e.g. 0.045 = +4.5% EV)
+ * Sharp-pool weighting:
+ *   - All sharp books (Pinnacle, Novig, ProphetX, ...) are averaged together
+ *     to form a single "sharp consensus" probability.
+ *   - That consensus gets SHARP_POOL_WEIGHT (default 50%).
+ *   - All non-sharp books split the remaining weight evenly.
+ *   - If no sharps are present, falls back to plain average of non-sharps.
+ *   - If only sharps are present, returns the sharp consensus.
+ *
+ * This is more robust than relying on a single sharp book — when Pinnacle is
+ * missing (early in the day), Novig/ProphetX can fill the sharp slot. When
+ * multiple sharps are present, they're treated as a pool.
+ */
+export const SHARP_POOL_WEIGHT = 0.5;
+
+export function weightedFairProbWithSharps(
+  bookProbs: { bookKey: string; prob: number }[],
+  sharpKeys: Set<string>
+): { fairProb: number; sharpsUsed: boolean; sharpCount: number } {
+  const sharps = bookProbs.filter((b) => sharpKeys.has(b.bookKey));
+  const others = bookProbs.filter((b) => !sharpKeys.has(b.bookKey));
+
+  if (sharps.length === 0 && others.length === 0) {
+    return { fairProb: NaN, sharpsUsed: false, sharpCount: 0 };
+  }
+  if (sharps.length === 0) {
+    const avg = others.reduce((s, b) => s + b.prob, 0) / others.length;
+    return { fairProb: avg, sharpsUsed: false, sharpCount: 0 };
+  }
+  if (others.length === 0) {
+    const sharpAvg = sharps.reduce((s, b) => s + b.prob, 0) / sharps.length;
+    return { fairProb: sharpAvg, sharpsUsed: true, sharpCount: sharps.length };
+  }
+
+  const sharpAvg = sharps.reduce((s, b) => s + b.prob, 0) / sharps.length;
+  const otherAvg = others.reduce((s, b) => s + b.prob, 0) / others.length;
+  const fair = SHARP_POOL_WEIGHT * sharpAvg + (1 - SHARP_POOL_WEIGHT) * otherAvg;
+  return { fairProb: fair, sharpsUsed: true, sharpCount: sharps.length };
+}
+
+/**
+ * EV per dollar staked.
+ *   EV% = fairProb * decimalOdds - 1
+ * Returns as a fraction (0.045 = +4.5%).
  */
 export function calcEV(fairProb: number, bestAmerican: number): number {
   const dec = americanToDecimal(bestAmerican);
   return fairProb * dec - 1;
+}
+
+/**
+ * Probability edge: difference between fair probability and the price's
+ * implied probability (in percentage points, as a fraction).
+ *
+ *   probEdge = fairProb - impliedProbOfPrice
+ *
+ * Conceptually different from EV — measures "how much more often will this
+ * hit than the price implies" rather than "expected dollar return per stake."
+ * Both are valid; we display both.
+ */
+export function calcProbEdge(fairProb: number, american: number): number {
+  return fairProb - americanToImplied(american);
 }
