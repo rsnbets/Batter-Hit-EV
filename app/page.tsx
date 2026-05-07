@@ -9,6 +9,7 @@ import type {
 } from "@/lib/types";
 import { REFERENCE_BOOK_OPTIONS } from "@/lib/types";
 import { americanToDecimal } from "@/lib/math";
+import { abbreviateGame } from "@/lib/teams";
 import UserBadge from "./UserBadge";
 import ReferenceBookSelect from "./ReferenceBookSelect";
 import { useReferenceBook } from "./useReferenceBook";
@@ -477,7 +478,7 @@ export default function Home() {
                 onClick={() => setSort("rawFair")}
                 className="border-l border-neutral-800"
               >
-                Fair: Avg (raw){sortIndicator("rawFair")}
+                Avg (raw){sortIndicator("rawFair")}
               </Th>
               <Th onClick={() => setSort("rawEv")}>
                 EV %{sortIndicator("rawEv")}
@@ -486,7 +487,7 @@ export default function Home() {
                 onClick={() => setSort("devigFair")}
                 className="border-l border-neutral-800"
               >
-                Fair: Devig{sortIndicator("devigFair")}
+                Devig{sortIndicator("devigFair")}
               </Th>
               <Th onClick={() => setSort("devigEv")}>
                 EV %{sortIndicator("devigEv")}
@@ -495,7 +496,7 @@ export default function Home() {
                 onClick={() => setSort("pinFair")}
                 className="border-l border-neutral-800 bg-blue-950/40"
               >
-                Fair: {referenceLabel}{sortIndicator("pinFair")}
+                {referenceLabel}{sortIndicator("pinFair")}
               </Th>
               <Th
                 onClick={() => setSort("pinEv")}
@@ -509,8 +510,8 @@ export default function Home() {
               >
                 Δ{sortIndicator("delta")}
               </Th>
-              <Th onClick={() => setSort("books")}>
-                Books{sortIndicator("books")}
+              <Th onClick={() => setSort("books")} title="Books quoting this side">
+                Bks{sortIndicator("books")}
               </Th>
               <Th>Track</Th>
             </tr>
@@ -655,7 +656,7 @@ export default function Home() {
                     }`}
                     title="Click to see all books for this line"
                   >
-                    <Td className="font-medium">
+                    <Td className="font-medium whitespace-nowrap">
                       <span className="text-neutral-500 mr-1 select-none">
                         {expanded ? "▾" : "▸"}
                       </span>
@@ -671,7 +672,9 @@ export default function Home() {
                       </span>
                     </Td>
                     <Td>{p.line}</Td>
-                    <Td className="text-neutral-400 text-xs">{p.game}</Td>
+                    <Td className="text-neutral-400 text-xs whitespace-nowrap" title={p.game}>
+                      {abbreviateGame(p.game)}
+                    </Td>
                     <Td>
                       {p.bestBook}
                       {p.sharpCount > 0 && (
@@ -1293,7 +1296,7 @@ function Th({
     <th
       onClick={onClick}
       title={title}
-      className={`px-3 py-2 text-left font-medium ${
+      className={`px-2 py-2 text-left font-medium whitespace-nowrap ${
         onClick ? "cursor-pointer hover:text-neutral-200" : ""
       } ${className}`}
     >
@@ -1312,7 +1315,7 @@ function Td({
   title?: string;
 }) {
   return (
-    <td className={`px-3 py-2 ${className}`} title={title}>
+    <td className={`px-2 py-2 ${className}`} title={title}>
       {children}
     </td>
   );

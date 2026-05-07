@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { BetWithCLV, ReferenceBookKey } from "@/lib/types";
 import { REFERENCE_BOOK_OPTIONS } from "@/lib/types";
 import { americanToDecimal } from "@/lib/math";
+import { abbreviateGame } from "@/lib/teams";
 import UserBadge from "../UserBadge";
 import ReferenceBookSelect from "../ReferenceBookSelect";
 import { useReferenceBook } from "../useReferenceBook";
@@ -372,13 +373,13 @@ export default function BetsPage() {
                   key={b.id}
                   className="border-t border-neutral-800 hover:bg-neutral-900/60"
                 >
-                  <Td className="text-neutral-400 text-xs">
-                    {b.game}
+                  <Td className="text-neutral-400 text-xs whitespace-nowrap" title={b.game}>
+                    {abbreviateGame(b.game)}
                     <div className="text-neutral-600">
                       {new Date(b.commence_time).toLocaleString()}
                     </div>
                   </Td>
-                  <Td className="font-medium">{b.player}</Td>
+                  <Td className="font-medium whitespace-nowrap">{b.player}</Td>
                   <Td>
                     <span
                       className={
@@ -502,7 +503,9 @@ function Th({
   className?: string;
 }) {
   return (
-    <th className={`px-3 py-2 text-left font-medium ${className}`}>
+    <th
+      className={`px-2 py-2 text-left font-medium whitespace-nowrap ${className}`}
+    >
       {children}
     </th>
   );
@@ -511,11 +514,17 @@ function Th({
 function Td({
   children,
   className = "",
+  title,
 }: {
   children: React.ReactNode;
   className?: string;
+  title?: string;
 }) {
-  return <td className={`px-3 py-2 ${className}`}>{children}</td>;
+  return (
+    <td className={`px-2 py-2 ${className}`} title={title}>
+      {children}
+    </td>
+  );
 }
 
 function Stat({

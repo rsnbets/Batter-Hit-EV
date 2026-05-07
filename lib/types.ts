@@ -165,14 +165,40 @@ export interface BetWithCLV extends BetRow {
   clv_vs_devigged_market_pct: number | null;
 }
 
-// Sharp books available as a "reference book" the user can pick to anchor
-// the Sharp fair-odds column and CLV view. "pool" is the current default
-// (average of all sharp books). Update this list if SHARP_BOOKS changes.
-export type ReferenceBookKey = "pool" | "novig" | "prophetx" | "pinnacle";
+// Books available as a "reference" the user can pick to anchor the Sharp
+// fair-odds column and CLV view. "pool" is the default (sharp-pool average);
+// any other value is a TARGET_BOOKS key from lib/oddsApi.ts. Keep this list
+// in sync if TARGET_BOOKS changes.
+export type ReferenceBookKey = string;
 
 export const REFERENCE_BOOK_OPTIONS: { key: ReferenceBookKey; label: string }[] = [
   { key: "pool", label: "Sharp Pool Avg" },
+  // Sharps
+  { key: "pinnacle", label: "Pinnacle" },
   { key: "novig", label: "Novig" },
   { key: "prophetx", label: "ProphetX" },
-  { key: "pinnacle", label: "Pinnacle" },
+  // Other exchanges
+  { key: "betopenly", label: "BetOpenly" },
+  // US major retail
+  { key: "draftkings", label: "DraftKings" },
+  { key: "fanduel", label: "FanDuel" },
+  { key: "betmgm", label: "BetMGM" },
+  { key: "williamhill_us", label: "Caesars" },
+  { key: "betrivers", label: "BetRivers" },
+  { key: "fanatics", label: "Fanatics" },
+  { key: "betus", label: "BetUS" },
+  { key: "bovada", label: "Bovada" },
+  // US2
+  { key: "espnbet", label: "ESPN BET" },
+  { key: "ballybet", label: "Bally Bet" },
+  { key: "fliff", label: "Fliff" },
+  { key: "betanysports", label: "BetAnySports" },
+  { key: "hardrockbet", label: "Hard Rock" },
+  { key: "hardrockbet_az", label: "Hard Rock (AZ)" },
+  { key: "hardrockbet_fl", label: "Hard Rock (FL)" },
+  { key: "hardrockbet_oh", label: "Hard Rock (OH)" },
+  // Offshore / low-vig
+  { key: "betonlineag", label: "BetOnline" },
+  { key: "lowvig", label: "LowVig" },
+  { key: "mybookieag", label: "MyBookie" },
 ];

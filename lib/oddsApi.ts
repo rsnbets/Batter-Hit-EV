@@ -65,7 +65,7 @@ const TARGET_BOOKS = new Set([
   // US2 (newer wave / often softer pricing)
   "espnbet",           // theScore Bet / formerly ESPN BET
   "ballybet",
-  "betparx",
+  // betparx excluded — not bettable for the user, and posts unreliable lines.
   "fliff",
   "betanysports",      // formerly BetAnySports
   "hardrockbet",       // IN + multiple states with same odds
@@ -101,7 +101,6 @@ export const SOFT_BOOKS = new Set([
   "bovada",
   "fliff",
   "ballybet",
-  "betparx",
   "betanysports",
   "espnbet",
   "hardrockbet",
