@@ -49,6 +49,11 @@ export interface BookOfferSnapshot {
   underAmerican: number | null;
   // true if this book contributed to the de-vig fair calc (had both sides)
   devigged: boolean;
+  // Per-side de-vigged American — populated only when `devigged` is true.
+  // Used by the "reference book" feature so the client can recompute the
+  // Sharp column against any specific book's de-vigged price.
+  overDevigAmerican: number | null;
+  underDevigAmerican: number | null;
 }
 
 /**
@@ -146,6 +151,9 @@ export interface BetRow {
   close_pinnacle_american: number | null;
   close_sharp_consensus_american: number | null;
   close_devigged_market_american: number | null;
+  // Per-book de-vigged American at close, keyed by book key. Used to compute
+  // CLV vs whichever reference book the user has selected.
+  close_per_book: Record<string, number> | null;
 
   result: "win" | "loss" | "push" | "void" | null;
 }
@@ -156,3 +164,15 @@ export interface BetWithCLV extends BetRow {
   clv_vs_sharp_consensus_pct: number | null;
   clv_vs_devigged_market_pct: number | null;
 }
+
+// Sharp books available as a "reference book" the user can pick to anchor
+// the Sharp fair-odds column and CLV view. "pool" is the current default
+// (average of all sharp books). Update this list if SHARP_BOOKS changes.
+export type ReferenceBookKey = "pool" | "novig" | "prophetx" | "pinnacle";
+
+export const REFERENCE_BOOK_OPTIONS: { key: ReferenceBookKey; label: string }[] = [
+  { key: "pool", label: "Sharp Pool Avg" },
+  { key: "novig", label: "Novig" },
+  { key: "prophetx", label: "ProphetX" },
+  { key: "pinnacle", label: "Pinnacle" },
+];

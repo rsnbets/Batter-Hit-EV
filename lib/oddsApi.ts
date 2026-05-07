@@ -333,14 +333,19 @@ function buildPlaysForEvent(event: OddsApiEvent): EventOutput {
     if (devigOffers.length < 2) continue; // need ≥ 2 two-sided books to de-vig
 
     // Build a snapshot covering ALL books (de-vig + one-sided) for display.
-    const devigKeys = new Set(devigOffers.map((o) => o.bookKey));
-    const allBookOffers = perBook.map((b) => ({
-      bookKey: b.bookKey,
-      bookTitle: b.bookTitle,
-      overAmerican: b.over,
-      underAmerican: b.under,
-      devigged: devigKeys.has(b.bookKey),
-    }));
+    const devigByKey = new Map(devigOffers.map((o) => [o.bookKey, o]));
+    const allBookOffers = perBook.map((b) => {
+      const dv = devigByKey.get(b.bookKey);
+      return {
+        bookKey: b.bookKey,
+        bookTitle: b.bookTitle,
+        overAmerican: b.over,
+        underAmerican: b.under,
+        devigged: dv !== undefined,
+        overDevigAmerican: dv ? impliedToAmerican(dv.overDevigged) : null,
+        underDevigAmerican: dv ? impliedToAmerican(dv.underDevigged) : null,
+      };
+    });
 
     // Best Over: max across every book that quoted an Over (de-vig or one-sided)
     let bestOverPrice = -Infinity;

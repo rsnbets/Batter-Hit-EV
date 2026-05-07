@@ -2,48 +2,37 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { BetWithCLV } from "@/lib/types";
+import type { BetWithCLV, ReferenceBookKey } from "@/lib/types";
+import { REFERENCE_BOOK_OPTIONS } from "@/lib/types";
 import { americanToDecimal } from "@/lib/math";
 import UserBadge from "../UserBadge";
+import ReferenceBookSelect from "../ReferenceBookSelect";
+import { useReferenceBook } from "../useReferenceBook";
 
-type ClvKey = "best" | "pinnacle" | "sharp" | "devigged";
+type ClvKey = "best" | "ref" | "sharp" | "devigged";
 
 const CLV_LABELS: Record<ClvKey, string> = {
   best: "vs Best Close",
-  pinnacle: "vs Pinnacle",
+  ref: "vs Reference",
   sharp: "vs Sharp Consensus",
   devigged: "vs De-vigged Market",
 };
 
-const CLV_FIELD: Record<ClvKey, keyof BetWithCLV> = {
-  best: "clv_vs_best_pct",
-  pinnacle: "clv_vs_pinnacle_pct",
-  sharp: "clv_vs_sharp_consensus_pct",
-  devigged: "clv_vs_devigged_market_pct",
-};
-
-const CLOSE_FIELD: Record<ClvKey, keyof BetWithCLV> = {
-  best: "close_best_american",
-  pinnacle: "close_pinnacle_american",
-  sharp: "close_sharp_consensus_american",
-  devigged: "close_devigged_market_american",
-};
-
 // "EV @ bet" column tracks the same fair-odds method you're judging close-line
-// value against. Best/Pinnacle/Sharp views all use sharp pricing → pin-weighted.
-// De-vigged Market view → devig-average EV. Existing bets logged before
-// ev_at_bet_devig_pct was added will show "—" on the De-vigged view.
+// value against. Sharp pool views use pin-weighted EV. De-vigged Market view
+// uses devig-average EV. Existing bets logged before ev_at_bet_devig_pct was
+// added show "—" on the De-vigged view.
 const EV_FIELD: Record<ClvKey, keyof BetWithCLV> = {
   best: "ev_at_bet_pct",
-  pinnacle: "ev_at_bet_pct",
+  ref: "ev_at_bet_pct",
   sharp: "ev_at_bet_pct",
   devigged: "ev_at_bet_devig_pct",
 };
 
 const EV_LABEL: Record<ClvKey, string> = {
-  best: "Pin-wt",
-  pinnacle: "Pin-wt",
-  sharp: "Pin-wt",
+  best: "Sharp",
+  ref: "Sharp",
+  sharp: "Sharp",
   devigged: "Devig",
 };
 
@@ -52,6 +41,45 @@ export default function BetsPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [clvKey, setClvKey] = useState<ClvKey>("best");
+  const [referenceBook, setReferenceBook] = useReferenceBook();
+
+  // Resolve the close + CLV for a given bet under the active view + reference.
+  // Returns nulls when the chosen book/benchmark didn't have data at close.
+  const resolveCloseAndClv = (
+    b: BetWithCLV
+  ): { close: number | null; clv: number | null; sourceLabel: string | null } => {
+    const betDecimal = americanToDecimal(b.bet_american);
+    let close: number | null = null;
+    let sourceLabel: string | null = null;
+
+    if (clvKey === "best") {
+      close = b.close_best_american;
+      sourceLabel = b.close_best_book ?? null;
+    } else if (clvKey === "sharp") {
+      close = b.close_sharp_consensus_american;
+    } else if (clvKey === "devigged") {
+      close = b.close_devigged_market_american;
+    } else {
+      // "ref" view — depends on which reference book is selected.
+      if (referenceBook === "pool") {
+        close = b.close_sharp_consensus_american;
+        sourceLabel = "Sharp Pool Avg";
+      } else {
+        close = b.close_per_book?.[referenceBook] ?? null;
+        sourceLabel =
+          REFERENCE_BOOK_OPTIONS.find((o) => o.key === referenceBook)?.label ??
+          referenceBook;
+      }
+    }
+
+    if (close === null) return { close: null, clv: null, sourceLabel };
+    const closeDecimal = americanToDecimal(close);
+    return { close, clv: betDecimal / closeDecimal - 1, sourceLabel };
+  };
+
+  const refLabel =
+    REFERENCE_BOOK_OPTIONS.find((o) => o.key === referenceBook)?.label ??
+    "Sharp";
 
   const load = async () => {
     setLoading(true);
@@ -91,11 +119,12 @@ export default function BetsPage() {
   };
 
   const stats = useMemo(() => {
-    const captured = bets.filter((b) => b.closing_captured_at !== null);
-    const field = CLV_FIELD[clvKey];
-    const clvs = captured
-      .map((b) => b[field] as number | null)
-      .filter((v): v is number => v !== null);
+    const clvs: number[] = [];
+    for (const b of bets) {
+      if (b.closing_captured_at === null) continue;
+      const { clv } = resolveCloseAndClv(b);
+      if (clv !== null) clvs.push(clv);
+    }
     if (clvs.length === 0) {
       return { total: bets.length, captured: 0, avgClv: null, posPct: null };
     }
@@ -107,7 +136,8 @@ export default function BetsPage() {
       avgClv: avg,
       posPct: pos / clvs.length,
     };
-  }, [bets, clvKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bets, clvKey, referenceBook]);
 
   // Settlement stats: W-L record, units P/L, win rate, ROI.
   // Excludes pushes and voids from win-rate / staked totals (they're return-of-stake).
@@ -180,22 +210,31 @@ export default function BetsPage() {
           {loading ? "Loading…" : "Refresh"}
         </button>
 
-        <div className="flex items-center gap-1 ml-2">
+        <div className="flex items-center gap-1 ml-2 flex-wrap">
           <span className="text-xs text-neutral-500 mr-1">CLV view:</span>
-          {(Object.keys(CLV_LABELS) as ClvKey[]).map((k) => (
-            <button
-              key={k}
-              onClick={() => setClvKey(k)}
-              className={`px-2 py-1 rounded text-xs ${
-                clvKey === k
-                  ? "bg-blue-600 text-white"
-                  : "bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
-              }`}
-            >
-              {CLV_LABELS[k]}
-            </button>
-          ))}
+          {(Object.keys(CLV_LABELS) as ClvKey[]).map((k) => {
+            const label =
+              k === "ref" ? `vs ${refLabel}` : CLV_LABELS[k];
+            return (
+              <button
+                key={k}
+                onClick={() => setClvKey(k)}
+                className={`px-2 py-1 rounded text-xs ${
+                  clvKey === k
+                    ? "bg-blue-600 text-white"
+                    : "bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
+
+        <ReferenceBookSelect
+          value={referenceBook}
+          onChange={setReferenceBook}
+        />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
@@ -205,7 +244,9 @@ export default function BetsPage() {
           value={`${stats.captured} / ${stats.total}`}
         />
         <Stat
-          label={`Avg CLV (${CLV_LABELS[clvKey]})`}
+          label={`Avg CLV (${
+            clvKey === "ref" ? `vs ${refLabel}` : CLV_LABELS[clvKey]
+          })`}
           value={
             stats.avgClv === null ? "—" : `${(stats.avgClv * 100).toFixed(2)}%`
           }
@@ -301,7 +342,7 @@ export default function BetsPage() {
               <Th>Bet Odds</Th>
               <Th>Stake</Th>
               <Th>Close Odds</Th>
-              <Th>CLV ({CLV_LABELS[clvKey]})</Th>
+              <Th>CLV ({clvKey === "ref" ? `vs ${refLabel}` : CLV_LABELS[clvKey]})</Th>
               <Th>EV @ bet ({EV_LABEL[clvKey]})</Th>
               <Th>Result</Th>
               <Th></Th>
@@ -320,8 +361,9 @@ export default function BetsPage() {
               </tr>
             )}
             {bets.map((b) => {
-              const clv = b[CLV_FIELD[clvKey]] as number | null;
-              const closeAm = b[CLOSE_FIELD[clvKey]] as number | null;
+              const resolved = resolveCloseAndClv(b);
+              const clv = resolved.clv;
+              const closeAm = resolved.close;
               const captured = b.closing_captured_at !== null;
               const startMs = new Date(b.commence_time).getTime();
               const pending = !captured && startMs > Date.now();
@@ -362,9 +404,9 @@ export default function BetsPage() {
                     {captured ? (
                       <>
                         {fmtAmerican(closeAm)}
-                        {b.close_best_book && clvKey === "best" && (
+                        {resolved.sourceLabel && (
                           <div className="text-[10px] text-neutral-500">
-                            {b.close_best_book}
+                            {resolved.sourceLabel}
                           </div>
                         )}
                       </>
@@ -430,16 +472,18 @@ export default function BetsPage() {
         </p>
         <p>
           <strong>vs Best Close</strong>: highest available price across all
-          tracked books at close. Default and most intuitive.
+          tracked books at close. Most intuitive.
         </p>
         <p>
-          <strong>vs Pinnacle</strong>: Pinnacle&apos;s de-vigged price.
-          Pinnacle does not currently quote MLB <code>batter_hits</code> via
-          the Odds API, so this is usually empty.
+          <strong>vs Reference</strong>: your selected reference book&apos;s
+          de-vigged closing price (set via the &quot;Reference&quot; dropdown).
+          Use &quot;Sharp Pool Avg&quot; for an aggregate; pick a specific book
+          (Novig, ProphetX, etc.) to anchor against that one.
         </p>
         <p>
-          <strong>vs Sharp Consensus</strong>: average of de-vigged sharp books
-          (Pinnacle, Novig, ProphetX). In practice = Novig + ProphetX.
+          <strong>vs Sharp Consensus</strong>: average of de-vigged sharp books.
+          Pinnacle, Novig, ProphetX qualify; Pinnacle doesn&apos;t quote MLB
+          batter_hits, so in practice this is Novig + ProphetX.
         </p>
         <p>
           <strong>vs De-vigged Market</strong>: average of every de-vigged

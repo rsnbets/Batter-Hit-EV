@@ -2,8 +2,16 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useState, useMemo } from "react";
-import type { PlayProw, ArbRow } from "@/lib/types";
+import type {
+  PlayProw,
+  ArbRow,
+  ReferenceBookKey,
+} from "@/lib/types";
+import { REFERENCE_BOOK_OPTIONS } from "@/lib/types";
+import { americanToDecimal } from "@/lib/math";
 import UserBadge from "./UserBadge";
+import ReferenceBookSelect from "./ReferenceBookSelect";
+import { useReferenceBook } from "./useReferenceBook";
 
 interface ApiResponse {
   plays: PlayProw[];
@@ -80,6 +88,7 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("ev");
   const [trackArb, setTrackArb] = useState<ArbRow | null>(null);
   const [arbMinMargin, setArbMinMargin] = useState<number>(0.5); // %
+  const [referenceBook, setReferenceBook] = useReferenceBook();
   // Tracks remaining credits at the moment the page was first loaded so we
   // can show "credits used this session". Set on the first successful load.
   const [sessionStartCredits, setSessionStartCredits] = useState<number | null>(
@@ -146,11 +155,42 @@ export default function Home() {
     load(false);
   }, []);
 
+  // Sharp-column values resolved against the user's reference book.
+  // ref === "pool"  → use sharp-pool-weighted fair (current Pin-wt behavior).
+  // ref === <bookKey> → use that book's de-vigged value if it quoted the line;
+  //                     null when the book didn't (column shows —).
+  const sharpView = (p: PlayProw): { fair: number | null; ev: number | null } => {
+    if (referenceBook === "pool") {
+      return {
+        fair: p.pinnacleWeighted.fairAmerican,
+        ev: p.pinnacleWeighted.evPercent,
+      };
+    }
+    const isOver = p.side === "Over";
+    const offer = p.allBookOffers.find((o) => o.bookKey === referenceBook);
+    const fair = offer
+      ? isOver
+        ? offer.overDevigAmerican
+        : offer.underDevigAmerican
+      : null;
+    if (fair === null || !Number.isFinite(fair)) return { fair: null, ev: null };
+    // EV% = fairProb * decimalOdds - 1
+    const fairProb =
+      fair > 0 ? 100 / (fair + 100) : Math.abs(fair) / (Math.abs(fair) + 100);
+    const ev = fairProb * americanToDecimal(p.bestAmerican) - 1;
+    return { fair, ev };
+  };
+
+  const referenceLabel =
+    REFERENCE_BOOK_OPTIONS.find((o) => o.key === referenceBook)?.label ??
+    "Sharp";
+
   const playWithDelta = (p: PlayProw) => {
+    const sharp = sharpView(p);
     const evs = [
       p.marketAvgRaw.evPercent,
       p.marketAvgDevig.evPercent,
-      p.pinnacleWeighted.evPercent,
+      sharp.ev ?? p.pinnacleWeighted.evPercent,
     ];
     return Math.max(...evs) - Math.min(...evs);
   };
@@ -192,8 +232,14 @@ export default function Home() {
       if (rawEvMin !== null && p.marketAvgRaw.evPercent * 100 < rawEvMin) return false;
       if (devigFairMin !== null && p.marketAvgDevig.fairAmerican < devigFairMin) return false;
       if (devigEvMin !== null && p.marketAvgDevig.evPercent * 100 < devigEvMin) return false;
-      if (pinFairMin !== null && p.pinnacleWeighted.fairAmerican < pinFairMin) return false;
-      if (pinEvMin !== null && p.pinnacleWeighted.evPercent * 100 < pinEvMin) return false;
+      if (pinFairMin !== null) {
+        const f = sharpView(p).fair;
+        if (f === null || f < pinFairMin) return false;
+      }
+      if (pinEvMin !== null) {
+        const e = sharpView(p).ev;
+        if (e === null || e * 100 < pinEvMin) return false;
+      }
       if (deltaMin !== null && playWithDelta(p) * 100 < deltaMin) return false;
       if (booksMin !== null && p.numBooks < booksMin) return false;
       return true;
@@ -238,12 +284,25 @@ export default function Home() {
         case "devigEv":
           cmp = a.marketAvgDevig.evPercent - b.marketAvgDevig.evPercent;
           break;
-        case "pinFair":
-          cmp = a.pinnacleWeighted.fairAmerican - b.pinnacleWeighted.fairAmerican;
+        case "pinFair": {
+          const af = sharpView(a).fair;
+          const bf = sharpView(b).fair;
+          // Nulls (book didn't quote the line) sort to the bottom regardless of dir.
+          if (af === null && bf === null) cmp = 0;
+          else if (af === null) cmp = sortDir === "asc" ? 1 : -1;
+          else if (bf === null) cmp = sortDir === "asc" ? -1 : 1;
+          else cmp = af - bf;
           break;
-        case "pinEv":
-          cmp = a.pinnacleWeighted.evPercent - b.pinnacleWeighted.evPercent;
+        }
+        case "pinEv": {
+          const ae = sharpView(a).ev;
+          const be = sharpView(b).ev;
+          if (ae === null && be === null) cmp = 0;
+          else if (ae === null) cmp = sortDir === "asc" ? 1 : -1;
+          else if (be === null) cmp = sortDir === "asc" ? -1 : 1;
+          else cmp = ae - be;
           break;
+        }
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -322,6 +381,11 @@ export default function Home() {
         >
           Clear filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
         </button>
+
+        <ReferenceBookSelect
+          value={referenceBook}
+          onChange={setReferenceBook}
+        />
 
         {data && (
           <div className="text-xs text-neutral-500 ml-auto text-right">
@@ -431,7 +495,7 @@ export default function Home() {
                 onClick={() => setSort("pinFair")}
                 className="border-l border-neutral-800 bg-blue-950/40"
               >
-                Fair: Pin-wt{sortIndicator("pinFair")}
+                Fair: {referenceLabel}{sortIndicator("pinFair")}
               </Th>
               <Th
                 onClick={() => setSort("pinEv")}
@@ -578,6 +642,7 @@ export default function Home() {
             )}
             {filteredPlays.map((p, i) => {
               const delta = playWithDelta(p);
+              const sharp = sharpView(p);
               const rowKey = `${p.player}-${p.line}-${p.side}-${i}`;
               const expanded = expandedKey === rowKey;
               const extras = p.numBooks - p.numDevigBooks;
@@ -609,9 +674,9 @@ export default function Home() {
                     <Td className="text-neutral-400 text-xs">{p.game}</Td>
                     <Td>
                       {p.bestBook}
-                      {p.pinnacleUsed && (
+                      {p.sharpCount > 0 && (
                         <span
-                          title="Pinnacle was available and used in pin-weighted calc"
+                          title={`${p.sharpCount} sharp book(s) used in the Sharp fair calc`}
                           className="ml-1 text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.6)]"
                         >
                           ★
@@ -635,10 +700,16 @@ export default function Home() {
                     </Td>
 
                     <Td className="border-l border-neutral-800 text-right bg-blue-950/20 text-neutral-200">
-                      {fmtAmerican(p.pinnacleWeighted.fairAmerican)}
+                      {sharp.fair === null
+                        ? "—"
+                        : fmtAmerican(sharp.fair)}
                     </Td>
                     <Td className="text-right bg-blue-950/20 font-bold">
-                      <EvCell ev={p.pinnacleWeighted.evPercent} />
+                      {sharp.ev === null ? (
+                        <span className="text-neutral-600">—</span>
+                      ) : (
+                        <EvCell ev={sharp.ev} />
+                      )}
                     </Td>
 
                     <Td className="border-l border-neutral-800 text-right text-neutral-400 text-xs">
@@ -704,13 +775,13 @@ export default function Home() {
           <strong>Devig</strong>: each book&apos;s Over/Under is de-vigged with the power method first, then averaged equally.
         </p>
         <p>
-          <strong>Pin-weighted</strong>: same de-vigging, but Pinnacle gets 50% of the weight when available; other books split the other 50%.
+          <strong>Sharp</strong>: by default, the de-vigged average of all sharp books pooled together (Novig, ProphetX, Pinnacle when present). Use the <em>Reference</em> dropdown above to anchor this column to a specific sharp book instead — the column header reflects your choice.
         </p>
         <p>
           <strong>Δ</strong>: spread between the highest and lowest EV across methods. Big delta = methods disagree — those are the ones to study.
         </p>
         <p>
-          ★ = Pinnacle was available and included in the Pin-weighted calc.
+          ★ = at least one sharp book is in the Sharp fair calc for this row.
         </p>
       </div>
       )}

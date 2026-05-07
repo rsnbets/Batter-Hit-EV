@@ -44,6 +44,7 @@ interface CloseData {
   pinnacleAmerican: number | null;
   sharpConsensusAmerican: number | null;
   devigeedMarketAmerican: number | null;
+  perBook: Record<string, number>;
 }
 
 export async function GET(request: Request) {
@@ -145,6 +146,7 @@ export async function GET(request: Request) {
                   closeData.sharpConsensusAmerican,
                 close_devigged_market_american:
                   closeData.devigeedMarketAmerican,
+                close_per_book: closeData.perBook,
               })
               .eq("id", bet.id);
           })
@@ -248,6 +250,7 @@ function computeCloseBenchmarks(
       pinnacleAmerican: null,
       sharpConsensusAmerican: null,
       devigeedMarketAmerican: null,
+      perBook: {},
     };
   }
 
@@ -278,11 +281,19 @@ function computeCloseBenchmarks(
         )
       : null;
 
+  // Per-book de-vigged American for every two-sided book at this line.
+  // Used by the "vs Reference Book" CLV view at read time.
+  const perBook: Record<string, number> = {};
+  for (const o of devigOffers) {
+    perBook[o.key] = impliedToAmerican(o.sideDevigged);
+  }
+
   return {
     bestBook: best.title,
     bestAmerican: best.sidePrice,
     pinnacleAmerican,
     sharpConsensusAmerican,
     devigeedMarketAmerican,
+    perBook,
   };
 }
