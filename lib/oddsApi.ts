@@ -46,7 +46,6 @@ const TARGET_BOOKS = new Set([
 
   // Other exchanges
   "betopenly",         // us_ex
-  "kalshi",            // us_ex - prediction market
 
   // US major retail
   "draftkings",
