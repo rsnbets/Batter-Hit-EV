@@ -32,7 +32,9 @@ export default function LoginPage() {
 
   return (
     <main className="max-w-sm mx-auto p-6 mt-20">
-      <h1 className="text-2xl font-bold mb-1">MLB Batter Hits +EV</h1>
+      <h1 className="text-2xl font-bold tracking-wider font-[family-name:var(--font-orbitron)] mb-1">
+        MLB BATTER HITS +EV
+      </h1>
       <p className="text-sm text-neutral-400 mb-6">Sign in to continue.</p>
 
       {sent ? (
@@ -55,7 +57,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-500 rounded font-medium text-sm disabled:opacity-50"
+            className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded font-medium text-sm disabled:opacity-50"
           >
             {loading ? "Sending…" : "Email me a sign-in link"}
           </button>

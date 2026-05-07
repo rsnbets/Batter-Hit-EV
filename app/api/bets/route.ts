@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUserId } from "@/lib/auth";
 import { americanToDecimal } from "@/lib/math";
 import type { BetRow, BetWithCLV } from "@/lib/types";
 
@@ -9,11 +9,8 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
-    const authClient = getServerSupabase();
-    const {
-      data: { user },
-    } = await authClient.auth.getUser();
-    if (!user) {
+    const userId = await getCurrentUserId();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -42,7 +39,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("bets")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         player: body.player,
         line: body.line,
         side: body.side,
@@ -57,6 +54,7 @@ export async function POST(request: Request) {
         fair_pinnacle_weighted_american:
           body.fair_pinnacle_weighted_american ?? null,
         ev_at_bet_pct: body.ev_at_bet_pct ?? null,
+        ev_at_bet_devig_pct: body.ev_at_bet_devig_pct ?? null,
       })
       .select()
       .single();
@@ -76,18 +74,15 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const authClient = getServerSupabase();
-    const {
-      data: { user },
-    } = await authClient.auth.getUser();
-    if (!user) {
+    const userId = await getCurrentUserId();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { data, error } = await supabase
       .from("bets")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("commence_time", { ascending: false });
 
     if (error) {

@@ -1,24 +1,16 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUserId } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-async function requireUser() {
-  const authClient = getServerSupabase();
-  const {
-    data: { user },
-  } = await authClient.auth.getUser();
-  return user;
-}
 
 export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  const user = await requireUser();
-  if (!user) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -26,7 +18,7 @@ export async function DELETE(
     .from("bets")
     .delete()
     .eq("id", params.id)
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -38,8 +30,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const user = await requireUser();
-  if (!user) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -52,7 +44,7 @@ export async function PATCH(
     .from("bets")
     .update(updates)
     .eq("id", params.id)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .select()
     .single();
 

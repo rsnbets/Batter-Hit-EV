@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEVPlays, OddsApiResult } from "@/lib/oddsApi";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUserId } from "@/lib/auth";
 import { supabase as supabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -25,12 +25,8 @@ export async function GET(request: Request) {
     );
   }
 
-  // Auth — middleware already guarantees a user, but read it here for rate limiting.
-  const supabase = getServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -41,7 +37,7 @@ export async function GET(request: Request) {
     const { data: row } = await supabaseAdmin
       .from("usage")
       .select("refresh_count")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("date", today)
       .maybeSingle();
 
@@ -58,7 +54,7 @@ export async function GET(request: Request) {
     }
 
     await supabaseAdmin.from("usage").upsert(
-      { user_id: user.id, date: today, refresh_count: current + 1 },
+      { user_id: userId, date: today, refresh_count: current + 1 },
       { onConflict: "user_id,date" }
     );
   }

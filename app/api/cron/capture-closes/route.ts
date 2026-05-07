@@ -187,6 +187,9 @@ function computeCloseBenchmarks(
   const offers: Offer[] = [];
 
   for (const bm of bookmakers) {
+    // Mirror lib/oddsApi.ts: Kalshi excluded everywhere.
+    if (bm.key === "kalshi") continue;
+
     let over: number | null = null;
     let under: number | null = null;
     let overFromStandard = false;
@@ -197,6 +200,9 @@ function computeCloseBenchmarks(
       const isStandard = m.key === "batter_hits";
       for (const o of m.outcomes || []) {
         if (o.description !== player || o.point !== line) continue;
+        // Drop junk prices (e.g. Kalshi placeholder -100000 / -9900) — same
+        // sanity bound as collectPerBookSides() in lib/oddsApi.ts.
+        if (!Number.isFinite(o.price) || Math.abs(o.price) > 2500) continue;
         if (
           o.name === "Over" &&
           (over === null || (isStandard && !overFromStandard))

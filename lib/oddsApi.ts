@@ -4,6 +4,7 @@ import {
   BookOffer,
   PlayProw,
   FairEstimate,
+  ArbRow,
 } from "./types";
 import {
   americanToImplied,
@@ -12,6 +13,7 @@ import {
   weightedFairProbWithSharps,
   impliedToAmerican,
   calcEV,
+  detectArb,
 } from "./math";
 
 const BASE = "https://api.the-odds-api.com/v4";
@@ -46,6 +48,9 @@ const TARGET_BOOKS = new Set([
 
   // Other exchanges
   "betopenly",         // us_ex
+  // Kalshi excluded — prediction market posts placeholder prices like
+  // -100000 / -9900 frequently enough to pollute the de-vig pool, and not
+  // a book the user has an account on.
 
   // US major retail
   "draftkings",
@@ -108,6 +113,7 @@ export const SOFT_BOOKS = new Set([
 
 export interface OddsApiResult {
   plays: PlayProw[];
+  arbs: ArbRow[];
   remainingRequests: string | null;
   usedRequests: string | null;
   fetchedAt: string;
@@ -168,6 +174,16 @@ interface PerBookSides {
  * If a book quotes the same side in both markets, we keep the standard
  * market's price (more reliable; alts are sometimes stale).
  */
+// Sanity bound on American odds. Anything outside this range (e.g. Kalshi
+// occasionally posts -100000 / -9900 placeholder prices) is treated as
+// missing data — these would otherwise pollute the de-vig pool and produce
+// spurious EV. ±2500 corresponds to ~96% / ~4% implied probability and is
+// well outside any realistic batter_hits market.
+const ODDS_BOUND = 2500;
+function isSanePrice(american: number): boolean {
+  return Number.isFinite(american) && Math.abs(american) <= ODDS_BOUND;
+}
+
 function collectPerBookSides(
   bookmakers: OddsApiBookmaker[],
   player: string,
@@ -185,6 +201,7 @@ function collectPerBookSides(
       const isStandard = m.key === "batter_hits";
       for (const o of m.outcomes) {
         if (o.description !== player || o.point !== line) continue;
+        if (!isSanePrice(o.price)) continue;
         if (o.name === "Over" && (over === null || (isStandard && !overFromStandard))) {
           over = o.price;
           overFromStandard = isStandard;
@@ -281,9 +298,17 @@ function computeAllFair(
   };
 }
 
-function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
+interface EventOutput {
+  plays: PlayProw[];
+  arbs: ArbRow[];
+}
+
+function buildPlaysForEvent(event: OddsApiEvent): EventOutput {
   const plays: PlayProw[] = [];
-  if (!event.bookmakers || event.bookmakers.length === 0) return plays;
+  const arbs: ArbRow[] = [];
+  if (!event.bookmakers || event.bookmakers.length === 0) {
+    return { plays, arbs };
+  }
 
   // Collect every (player, line) combo seen across either market and any book
   const combos = new Set<string>();
@@ -390,9 +415,40 @@ function buildPlaysForEvent(event: OddsApiEvent): PlayProw[] {
       sharpCount: underFair.sharpCount,
       allBookOffers,
     });
+
+    // Two-way arb: best Over (price) + best Under (price) across all books for
+    // the same line. Skip if same book (would just be that book's vig). The
+    // ±2500 sanity filter is already applied at collectPerBookSides ingest.
+    if (
+      bestOverPrice !== -Infinity &&
+      bestUnderPrice !== -Infinity &&
+      bestOverBookKey !== bestUnderBookKey
+    ) {
+      const arb = detectArb(bestOverPrice, bestUnderPrice);
+      if (arb) {
+        arbs.push({
+          player,
+          market: MARKET_LABEL,
+          line,
+          game,
+          commenceTime: event.commence_time,
+          eventId: event.id,
+          overBook: bestOverBookTitle,
+          overBookKey: bestOverBookKey,
+          overAmerican: bestOverPrice,
+          underBook: bestUnderBookTitle,
+          underBookKey: bestUnderBookKey,
+          underAmerican: bestUnderPrice,
+          marginPct: arb.margin,
+          overStakeFraction: arb.overStake,
+          underStakeFraction: arb.underStake,
+          numBooks: devigOffers.length,
+        });
+      }
+    }
   }
 
-  return plays;
+  return { plays, arbs };
 }
 
 export async function getEVPlays(apiKey: string): Promise<OddsApiResult> {
@@ -415,6 +471,7 @@ export async function getEVPlays(apiKey: string): Promise<OddsApiResult> {
   const BATCH_GAP_MS = 250;
 
   const allPlays: PlayProw[] = [];
+  const allArbs: ArbRow[] = [];
 
   for (let i = 0; i < upcoming.length; i += BATCH_SIZE) {
     const batch = upcoming.slice(i, i + BATCH_SIZE);
@@ -431,7 +488,9 @@ export async function getEVPlays(apiKey: string): Promise<OddsApiResult> {
       if (remaining !== null) lastRemaining = remaining;
       if (used !== null) lastUsed = used;
       if (!data) return;
-      allPlays.push(...buildPlaysForEvent(data));
+      const out = buildPlaysForEvent(data);
+      allPlays.push(...out.plays);
+      allArbs.push(...out.arbs);
     });
 
     if (i + BATCH_SIZE < upcoming.length) {
@@ -444,8 +503,12 @@ export async function getEVPlays(apiKey: string): Promise<OddsApiResult> {
     (a, b) => b.pinnacleWeighted.evPercent - a.pinnacleWeighted.evPercent
   );
 
+  // Arbs sorted by margin descending — biggest guaranteed-profit edge first.
+  allArbs.sort((a, b) => b.marginPct - a.marginPct);
+
   return {
     plays: allPlays,
+    arbs: allArbs,
     remainingRequests: lastRemaining,
     usedRequests: lastUsed,
     fetchedAt: new Date().toISOString(),

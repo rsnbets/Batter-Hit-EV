@@ -91,6 +91,30 @@ export interface PlayProw {
   allBookOffers: BookOfferSnapshot[];
 }
 
+// Two-way arbitrage row — best Over at one book, best Under at another, with
+// implied probabilities summing to less than 1 (guaranteed profit when sized).
+export interface ArbRow {
+  player: string;
+  market: string;
+  line: number;
+  game: string;
+  commenceTime: string;
+  eventId: string;
+
+  overBook: string;
+  overBookKey: string;
+  overAmerican: number;
+
+  underBook: string;
+  underBookKey: string;
+  underAmerican: number;
+
+  marginPct: number;          // 0..1 — guaranteed return on total stake
+  overStakeFraction: number;  // 0..1 — fraction of total stake on Over leg
+  underStakeFraction: number; // 0..1 — fraction of total stake on Under leg
+  numBooks: number;           // total books quoting both sides on this line
+}
+
 // CLV tracking
 
 export interface BetRow {
@@ -113,7 +137,8 @@ export interface BetRow {
 
   fair_devigged_american: number | null;
   fair_pinnacle_weighted_american: number | null;
-  ev_at_bet_pct: number | null;
+  ev_at_bet_pct: number | null; // pin-weighted method (legacy field name)
+  ev_at_bet_devig_pct: number | null; // devig-average method
 
   closing_captured_at: string | null;
   close_best_book: string | null;

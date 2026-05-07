@@ -7,6 +7,15 @@ export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   const isPublic = PUBLIC_PATH_PREFIXES.some((p) => path.startsWith(p));
 
+  // Dev bypass: skip auth entirely when iterating locally.
+  // Gated on NODE_ENV=development so it can never accidentally enable in prod.
+  if (
+    process.env.NODE_ENV === "development" &&
+    process.env.DEV_USER_ID
+  ) {
+    return NextResponse.next({ request: { headers: req.headers } });
+  }
+
   let res = NextResponse.next({ request: { headers: req.headers } });
 
   const supabase = createServerClient(

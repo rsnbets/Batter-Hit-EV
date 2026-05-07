@@ -156,3 +156,42 @@ export function calcEV(fairProb: number, bestAmerican: number): number {
 export function calcProbEdge(fairProb: number, american: number): number {
   return fairProb - americanToImplied(american);
 }
+
+/**
+ * Detect a two-way arbitrage given the best Over and Under American prices.
+ *
+ * Returns null if the implied probabilities sum to >= 1 (no arb).
+ * Returns arb details when the sum is < 1, meaning correctly proportioned
+ * stakes on both sides guarantee profit regardless of outcome.
+ *
+ * - margin: guaranteed return on total stake (e.g. 0.0623 = 6.23% profit).
+ * - overStake / underStake: how to split $1 of total stake to perfectly hedge
+ *   (sum to 1.0). Multiply by your real bankroll for actual leg sizes.
+ * - overReturn / underReturn: total return per $1 staked when each side hits.
+ *   Both equal 1 + margin in a clean arb.
+ */
+export interface ArbResult {
+  margin: number;
+  overStake: number;
+  underStake: number;
+  overReturn: number;
+  underReturn: number;
+}
+
+export function detectArb(
+  bestOverAmerican: number,
+  bestUnderAmerican: number
+): ArbResult | null {
+  const overImplied = americanToImplied(bestOverAmerican);
+  const underImplied = americanToImplied(bestUnderAmerican);
+  const sum = overImplied + underImplied;
+  if (sum >= 1) return null;
+
+  const margin = 1 - sum;
+  const overStake = overImplied / sum;
+  const underStake = underImplied / sum;
+  const overReturn = overStake * americanToDecimal(bestOverAmerican);
+  const underReturn = underStake * americanToDecimal(bestUnderAmerican);
+
+  return { margin, overStake, underStake, overReturn, underReturn };
+}

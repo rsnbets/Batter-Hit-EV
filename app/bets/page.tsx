@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { BetWithCLV } from "@/lib/types";
+import { americanToDecimal } from "@/lib/math";
 import UserBadge from "../UserBadge";
 
 type ClvKey = "best" | "pinnacle" | "sharp" | "devigged";
@@ -26,6 +27,24 @@ const CLOSE_FIELD: Record<ClvKey, keyof BetWithCLV> = {
   pinnacle: "close_pinnacle_american",
   sharp: "close_sharp_consensus_american",
   devigged: "close_devigged_market_american",
+};
+
+// "EV @ bet" column tracks the same fair-odds method you're judging close-line
+// value against. Best/Pinnacle/Sharp views all use sharp pricing → pin-weighted.
+// De-vigged Market view → devig-average EV. Existing bets logged before
+// ev_at_bet_devig_pct was added will show "—" on the De-vigged view.
+const EV_FIELD: Record<ClvKey, keyof BetWithCLV> = {
+  best: "ev_at_bet_pct",
+  pinnacle: "ev_at_bet_pct",
+  sharp: "ev_at_bet_pct",
+  devigged: "ev_at_bet_devig_pct",
+};
+
+const EV_LABEL: Record<ClvKey, string> = {
+  best: "Pin-wt",
+  pinnacle: "Pin-wt",
+  sharp: "Pin-wt",
+  devigged: "Devig",
 };
 
 export default function BetsPage() {
@@ -90,12 +109,51 @@ export default function BetsPage() {
     };
   }, [bets, clvKey]);
 
+  // Settlement stats: W-L record, units P/L, win rate, ROI.
+  // Excludes pushes and voids from win-rate / staked totals (they're return-of-stake).
+  const settlement = useMemo(() => {
+    let wins = 0;
+    let losses = 0;
+    let pushes = 0;
+    let voids = 0;
+    let units = 0; // net P/L in units
+    let staked = 0; // total stake on settled (W/L only) bets
+    for (const b of bets) {
+      const stake = Number(b.stake) || 0;
+      if (b.result === "win") {
+        wins++;
+        staked += stake;
+        units += stake * (americanToDecimal(b.bet_american) - 1);
+      } else if (b.result === "loss") {
+        losses++;
+        staked += stake;
+        units -= stake;
+      } else if (b.result === "push") {
+        pushes++;
+      } else if (b.result === "void") {
+        voids++;
+      }
+    }
+    const settled = wins + losses;
+    return {
+      wins,
+      losses,
+      pushes,
+      voids,
+      settled,
+      units,
+      staked,
+      winRate: settled > 0 ? wins / settled : null,
+      roi: staked > 0 ? units / staked : null,
+    };
+  }, [bets]);
+
   return (
     <main className="max-w-[1400px] mx-auto p-4 sm:p-6">
       <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Bet Log — CLV Tracking
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-wider font-[family-name:var(--font-orbitron)]">
+            BET LOG — CLV TRACKING
           </h1>
           <p className="text-sm text-neutral-400 mt-1">
             Closing-line value vs. four reference benchmarks. Closing prices
@@ -105,7 +163,7 @@ export default function BetsPage() {
         <div className="flex items-center gap-4">
           <Link
             href="/"
-            className="text-sm text-emerald-400 hover:text-emerald-300"
+            className="text-sm text-blue-400 hover:text-blue-300"
           >
             ← Back to +EV Finder
           </Link>
@@ -117,7 +175,7 @@ export default function BetsPage() {
         <button
           onClick={load}
           disabled={loading}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded font-medium text-sm"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded font-medium text-sm"
         >
           {loading ? "Loading…" : "Refresh"}
         </button>
@@ -130,7 +188,7 @@ export default function BetsPage() {
               onClick={() => setClvKey(k)}
               className={`px-2 py-1 rounded text-xs ${
                 clvKey === k
-                  ? "bg-emerald-700 text-white"
+                  ? "bg-blue-600 text-white"
                   : "bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
               }`}
             >
@@ -176,6 +234,55 @@ export default function BetsPage() {
         />
       </div>
 
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <Stat
+          label="Record (W-L-P)"
+          value={`${settlement.wins}-${settlement.losses}-${settlement.pushes}`}
+        />
+        <Stat
+          label="Net P/L (units)"
+          value={
+            settlement.settled === 0
+              ? "—"
+              : `${settlement.units >= 0 ? "+" : ""}${settlement.units.toFixed(2)}u`
+          }
+          color={
+            settlement.settled === 0
+              ? "neutral"
+              : settlement.units > 0
+              ? "green"
+              : settlement.units < 0
+              ? "red"
+              : "neutral"
+          }
+        />
+        <Stat
+          label="Win rate"
+          value={
+            settlement.winRate === null
+              ? "—"
+              : `${(settlement.winRate * 100).toFixed(0)}%`
+          }
+        />
+        <Stat
+          label="ROI"
+          value={
+            settlement.roi === null
+              ? "—"
+              : `${settlement.roi >= 0 ? "+" : ""}${(settlement.roi * 100).toFixed(1)}%`
+          }
+          color={
+            settlement.roi === null
+              ? "neutral"
+              : settlement.roi > 0
+              ? "green"
+              : settlement.roi < 0
+              ? "red"
+              : "neutral"
+          }
+        />
+      </div>
+
       {err && (
         <div className="bg-red-950/60 border border-red-800 text-red-200 rounded p-3 mb-4 text-sm">
           {err}
@@ -192,9 +299,10 @@ export default function BetsPage() {
               <Th>Line</Th>
               <Th>Book</Th>
               <Th>Bet Odds</Th>
+              <Th>Stake</Th>
               <Th>Close Odds</Th>
               <Th>CLV ({CLV_LABELS[clvKey]})</Th>
-              <Th>EV @ bet</Th>
+              <Th>EV @ bet ({EV_LABEL[clvKey]})</Th>
               <Th>Result</Th>
               <Th></Th>
             </tr>
@@ -203,7 +311,7 @@ export default function BetsPage() {
             {bets.length === 0 && !loading && (
               <tr>
                 <td
-                  colSpan={11}
+                  colSpan={12}
                   className="text-center text-neutral-500 py-8"
                 >
                   No bets logged yet. Click <strong>Track</strong> on a play in
@@ -247,6 +355,9 @@ export default function BetsPage() {
                   <Td className="font-medium">
                     {fmtAmerican(b.bet_american)}
                   </Td>
+                  <Td className="text-neutral-300">
+                    {Number(b.stake).toFixed(b.stake % 1 === 0 ? 0 : 2)}u
+                  </Td>
                   <Td>
                     {captured ? (
                       <>
@@ -269,11 +380,14 @@ export default function BetsPage() {
                     <ClvCell value={clv} />
                   </Td>
                   <Td className="text-right">
-                    {b.ev_at_bet_pct !== null ? (
-                      <EvCell ev={b.ev_at_bet_pct} />
-                    ) : (
-                      <span className="text-neutral-600">—</span>
-                    )}
+                    {(() => {
+                      const ev = b[EV_FIELD[clvKey]] as number | null;
+                      return ev !== null ? (
+                        <EvCell ev={ev} />
+                      ) : (
+                        <span className="text-neutral-600">—</span>
+                      );
+                    })()}
                   </Td>
                   <Td>
                     <select
