@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEVPlays, OddsApiResult } from "@/lib/oddsApi";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { supabase as supabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,6 +10,8 @@ export const maxDuration = 60; // Vercel Pro: 60s. On Hobby plan, change to 10.
 // In-memory cache. Fresh on cold start, shared across requests on warm container.
 let cache: { result: OddsApiResult; ts: number } | null = null;
 const CACHE_TTL_MS = 60 * 1000; // 60s — protects against double-clicks / refresh spam
+
+const DAILY_REFRESH_LIMIT = 20;
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -18,6 +22,44 @@ export async function GET(request: Request) {
     return NextResponse.json(
       { error: "ODDS_API_KEY not set" },
       { status: 500 }
+    );
+  }
+
+  // Auth — middleware already guarantees a user, but read it here for rate limiting.
+  const supabase = getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit only the explicit refresh action (the credit-spending one).
+  // Initial loads / cached responses don't count.
+  if (force) {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+    const { data: row } = await supabaseAdmin
+      .from("usage")
+      .select("refresh_count")
+      .eq("user_id", user.id)
+      .eq("date", today)
+      .maybeSingle();
+
+    const current = row?.refresh_count ?? 0;
+    if (current >= DAILY_REFRESH_LIMIT) {
+      return NextResponse.json(
+        {
+          error: `Daily refresh limit reached (${DAILY_REFRESH_LIMIT}/day). Resets at UTC midnight.`,
+          refreshesUsed: current,
+          refreshesLimit: DAILY_REFRESH_LIMIT,
+        },
+        { status: 429 }
+      );
+    }
+
+    await supabaseAdmin.from("usage").upsert(
+      { user_id: user.id, date: today, refresh_count: current + 1 },
+      { onConflict: "user_id,date" }
     );
   }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { americanToDecimal } from "@/lib/math";
 import type { BetRow, BetWithCLV } from "@/lib/types";
 
@@ -8,6 +9,14 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    const authClient = getServerSupabase();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
 
     const required = [
@@ -33,6 +42,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("bets")
       .insert({
+        user_id: user.id,
         player: body.player,
         line: body.line,
         side: body.side,
@@ -66,9 +76,18 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
+    const authClient = getServerSupabase();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { data, error } = await supabase
       .from("bets")
       .select("*")
+      .eq("user_id", user.id)
       .order("commence_time", { ascending: false });
 
     if (error) {

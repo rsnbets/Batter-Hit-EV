@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { BetWithCLV } from "@/lib/types";
+import UserBadge from "../UserBadge";
 
 type ClvKey = "best" | "pinnacle" | "sharp" | "devigged";
 
@@ -101,12 +102,15 @@ export default function BetsPage() {
             captured ~2 min before each game starts.
           </p>
         </div>
-        <Link
-          href="/"
-          className="text-sm text-emerald-400 hover:text-emerald-300"
-        >
-          ← Back to +EV Finder
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/"
+            className="text-sm text-emerald-400 hover:text-emerald-300"
+          >
+            ← Back to +EV Finder
+          </Link>
+          <UserBadge />
+        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">

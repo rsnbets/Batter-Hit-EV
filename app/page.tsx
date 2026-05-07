@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useState, useMemo } from "react";
 import type { PlayProw } from "@/lib/types";
+import UserBadge from "./UserBadge";
 
 interface ApiResponse {
   plays: PlayProw[];
@@ -253,12 +254,15 @@ export default function Home() {
             Three fair-odds methods side-by-side. Compare and pick what works for you.
           </p>
         </div>
-        <Link
-          href="/bets"
-          className="text-sm text-emerald-400 hover:text-emerald-300"
-        >
-          View Bet Log →
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/bets"
+            className="text-sm text-emerald-400 hover:text-emerald-300"
+          >
+            View Bet Log →
+          </Link>
+          <UserBadge />
+        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
