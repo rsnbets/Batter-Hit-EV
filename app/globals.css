@@ -1,3 +1,44 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --bg: #090909;
+  --panel: #0D0D0D;
+  --surface-2: #141414;
+  --surface-3: #1C1C1C;
+  --border: rgba(255, 255, 255, 0.05);
+  --border-2: rgba(255, 255, 255, 0.08);
+  --text: #F0EEE8;
+  --muted: rgba(255, 255, 255, 0.42);
+  --dim: rgba(255, 255, 255, 0.25);
+  --green: #4DFF78;
+  --green-dim: rgba(77, 255, 120, 0.15);
+  --green-faint: rgba(77, 255, 120, 0.06);
+  --cyan: #00D4FF;
+  --cyan-dim: rgba(0, 212, 255, 0.12);
+  --yellow: #F5B545;
+  --red: #FF3D3D;
+  --red-dim: rgba(255, 61, 61, 0.12);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-weight: 400;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle film-grain overlay — matches the kprop-tool's texture treatment. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}

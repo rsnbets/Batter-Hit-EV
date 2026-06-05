@@ -71,7 +71,7 @@ const TARGET_BOOKS = new Set([
   "hardrockbet",       // IN + multiple states with same odds
   "hardrockbet_az",
   "hardrockbet_fl",
-  "hardrockbet_oh",
+  "hardrockbet_in",
 
   // Offshore / low-vig (us region)
   "betonlineag",       // BetOnline.ag — sister site to Bookmaker.eu
@@ -106,7 +106,7 @@ export const SOFT_BOOKS = new Set([
   "hardrockbet",
   "hardrockbet_az",
   "hardrockbet_fl",
-  "hardrockbet_oh",
+  "hardrockbet_in",
   "fanatics",
 ]);
 

@@ -1,13 +1,20 @@
 import type { Metadata } from "next";
-import { Orbitron } from "next/font/google";
+import { Plus_Jakarta_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
 import BrandHeader from "./BrandHeader";
 import BrandFooter from "./BrandFooter";
 
-const orbitron = Orbitron({
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  weight: ["500", "700"],
-  variable: "--font-orbitron",
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-jakarta",
+  display: "swap",
+});
+
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-dmmono",
   display: "swap",
 });
 
@@ -23,8 +30,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={orbitron.variable}>
-      <body className="bg-neutral-950 text-neutral-100 antialiased min-h-screen flex flex-col">
+    <html lang="en" className={`${jakarta.variable} ${dmMono.variable}`}>
+      <body className="min-h-screen flex flex-col">
         <BrandHeader />
         <div className="flex-1">{children}</div>
         <BrandFooter />

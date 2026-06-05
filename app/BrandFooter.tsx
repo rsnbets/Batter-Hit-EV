@@ -1,33 +1,16 @@
 export default function BrandFooter() {
   return (
-    <footer className="border-t border-neutral-900 bg-neutral-950 mt-12">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6 text-xs text-neutral-500">
-        <a
-          href="https://profit-path-sports.vercel.app/"
-          className="font-[family-name:var(--font-orbitron)] tracking-widest text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1.5"
-        >
-          <span className="text-amber-400">⚡</span>
-          PROFIT PATH SPORTS
-          <span className="text-amber-400">⚡</span>
-        </a>
-        <div className="flex flex-wrap gap-4">
-          <a
-            href="https://profit-path-sports.vercel.app/"
-            className="hover:text-neutral-300"
-          >
-            Toolbox
-          </a>
-          <a
-            href="https://profit-path-sports.vercel.app/#sportsbooks"
-            className="hover:text-neutral-300"
-          >
-            Sportsbook offers
-          </a>
-        </div>
-        <div className="sm:ml-auto text-neutral-600">
-          Tools, education &amp; edge — never a paywall.
-        </div>
-      </div>
+    <footer className="max-w-[1400px] mx-auto px-4 sm:px-6 mt-8 pt-4 pb-10 border-t border-ppborder text-center text-[10px] leading-[1.6] tracking-[0.3px] text-dim">
+      <a
+        href="https://www.profitpathsports.com/"
+        className="text-muted hover:text-ppcyan transition-colors"
+      >
+        Profit Path Sports
+      </a>
+      <span className="mx-2 text-ppborder2">·</span>
+      Tools, education &amp; edge — never a paywall
+      <span className="mx-2 text-ppborder2">·</span>
+      Bet responsibly. Lines move. Books limit.
     </footer>
   );
 }

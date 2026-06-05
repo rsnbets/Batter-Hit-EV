@@ -196,7 +196,7 @@ export const REFERENCE_BOOK_OPTIONS: { key: ReferenceBookKey; label: string }[] 
   { key: "hardrockbet", label: "Hard Rock" },
   { key: "hardrockbet_az", label: "Hard Rock (AZ)" },
   { key: "hardrockbet_fl", label: "Hard Rock (FL)" },
-  { key: "hardrockbet_oh", label: "Hard Rock (OH)" },
+  { key: "hardrockbet_in", label: "Hard Rock (IN)" },
   // Offshore / low-vig
   { key: "betonlineag", label: "BetOnline" },
   { key: "lowvig", label: "LowVig" },

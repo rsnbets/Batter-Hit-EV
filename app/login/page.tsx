@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
+import Hero from "../Hero";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -31,42 +32,42 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="max-w-sm mx-auto p-6 mt-20">
-      <h1 className="text-2xl font-bold tracking-wider font-[family-name:var(--font-orbitron)] mb-1">
-        MLB BATTER HITS +EV
-      </h1>
-      <p className="text-sm text-neutral-400 mb-6">Sign in to continue.</p>
+    <main className="max-w-md mx-auto px-4 sm:px-6 pb-12">
+      <Hero tagline="MLB Batter Hits +EV" meta="Invite-only · sign in to continue" />
 
       {sent ? (
-        <div className="rounded bg-emerald-950/40 border border-emerald-800/60 p-4 text-emerald-200 text-sm">
+        <div className="rounded-[14px] bg-[var(--green-faint)] border border-ppgreen/30 p-4 text-ppgreen text-sm">
           Check your email for a sign-in link. The link expires in 1 hour.
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-3">
           <label className="block">
-            <div className="text-xs text-neutral-400 mb-1">Email</div>
+            <div className="text-[10px] tracking-[1.5px] uppercase text-dim mb-1.5">
+              Email
+            </div>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
-              className="w-full bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm"
+              className="w-full bg-panel border border-ppborder2 rounded-[10px] px-3 py-2.5 text-sm text-pptext placeholder:text-dim focus:border-ppcyan focus:outline-none transition-colors"
             />
           </label>
           <button
             type="submit"
             disabled={loading}
-            className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded font-medium text-sm disabled:opacity-50"
+            className="w-full px-3 py-2.5 bg-ppcyan border border-ppcyan text-[#06101e] rounded-[10px] text-[11px] font-bold tracking-[1.5px] uppercase hover:opacity-90 disabled:opacity-50 transition-opacity"
+            style={{ boxShadow: "0 0 16px rgba(0,212,255,0.25)" }}
           >
             {loading ? "Sending…" : "Email me a sign-in link"}
           </button>
           {err && (
-            <div className="bg-red-950/60 border border-red-800 text-red-200 rounded p-2 text-xs">
+            <div className="bg-[var(--red-dim)] border border-ppred/40 text-ppred rounded-[10px] p-3 text-xs">
               {err}
             </div>
           )}
-          <p className="text-xs text-neutral-500 pt-2">
+          <p className="text-xs text-muted pt-2 text-center">
             Invite-only. Email must already be added by an admin.
           </p>
         </form>

@@ -9,6 +9,7 @@ import { abbreviateGame } from "@/lib/teams";
 import UserBadge from "../UserBadge";
 import ReferenceBookSelect from "../ReferenceBookSelect";
 import { useReferenceBook } from "../useReferenceBook";
+import Hero from "../Hero";
 
 type ClvKey = "best" | "ref" | "sharp" | "devigged";
 
@@ -179,52 +180,56 @@ export default function BetsPage() {
     };
   }, [bets]);
 
-  return (
-    <main className="max-w-[1400px] mx-auto p-4 sm:p-6">
-      <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-wider font-[family-name:var(--font-orbitron)]">
-            BET LOG — CLV TRACKING
-          </h1>
-          <p className="text-sm text-neutral-400 mt-1">
-            Closing-line value vs. four reference benchmarks. Closing prices
-            captured ~2 min before each game starts.
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="text-sm text-blue-400 hover:text-blue-300"
-          >
-            ← Back to +EV Finder
-          </Link>
-          <UserBadge />
-        </div>
-      </header>
+  const heroMeta = (
+    <>
+      <Link href="/" className="text-ppcyan hover:opacity-80">
+        ← +EV Finder
+      </Link>
+      <span className="mx-2 text-ppborder2">·</span>
+      Closing-line value vs. four reference benchmarks
+    </>
+  );
 
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+  return (
+    <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pb-12">
+      <div className="flex justify-end pt-2">
+        <UserBadge />
+      </div>
+
+      <Hero tagline="Bet Log — CLV Tracking" meta={heroMeta} />
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         <button
           onClick={load}
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded font-medium text-sm"
+          className="px-3.5 py-2 bg-ppcyan border border-ppcyan text-[#06101e] rounded-[10px] text-[11px] font-bold tracking-[1.5px] uppercase hover:opacity-90 disabled:opacity-50 transition-opacity"
+          style={{ boxShadow: "0 0 16px rgba(0,212,255,0.25)" }}
         >
           {loading ? "Loading…" : "Refresh"}
         </button>
 
-        <div className="flex items-center gap-1 ml-2 flex-wrap">
-          <span className="text-xs text-neutral-500 mr-1">CLV view:</span>
+        <div className="flex items-center gap-1.5 ml-2 flex-wrap">
+          <span className="text-[10px] tracking-[1.5px] uppercase text-dim mr-1">
+            CLV
+          </span>
           {(Object.keys(CLV_LABELS) as ClvKey[]).map((k) => {
             const label =
               k === "ref" ? `vs ${refLabel}` : CLV_LABELS[k];
+            const active = clvKey === k;
             return (
               <button
                 key={k}
                 onClick={() => setClvKey(k)}
-                className={`px-2 py-1 rounded text-xs ${
-                  clvKey === k
-                    ? "bg-blue-600 text-white"
-                    : "bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
+                className={`px-3 py-1.5 rounded-[10px] text-[10px] font-bold tracking-[1.5px] uppercase transition-colors ${
+                  active
+                    ? "bg-ppcyan border border-ppcyan text-[#06101e]"
+                    : "border border-ppborder2 bg-panel text-pptext hover:border-ppcyan hover:text-ppcyan"
                 }`}
+                style={
+                  active
+                    ? { boxShadow: "0 0 16px rgba(0,212,255,0.25)" }
+                    : undefined
+                }
               >
                 {label}
               </button>
@@ -326,14 +331,14 @@ export default function BetsPage() {
       </div>
 
       {err && (
-        <div className="bg-red-950/60 border border-red-800 text-red-200 rounded p-3 mb-4 text-sm">
+        <div className="bg-[var(--red-dim)] border border-ppred/40 text-ppred rounded p-3 mb-4 text-sm">
           {err}
         </div>
       )}
 
-      <div className="overflow-x-auto rounded border border-neutral-800">
+      <div className="overflow-x-auto rounded-[14px] border border-ppborder bg-panel">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-900 text-neutral-400 text-xs uppercase">
+          <thead className="bg-surface2 text-muted text-[10px] tracking-[1.5px] font-bold uppercase border-b border-ppborder2">
             <tr>
               <Th>Game</Th>
               <Th>Player</Th>
@@ -354,7 +359,7 @@ export default function BetsPage() {
               <tr>
                 <td
                   colSpan={12}
-                  className="text-center text-neutral-500 py-8"
+                  className="text-center text-muted py-8"
                 >
                   No bets logged yet. Click <strong>Track</strong> on a play in
                   the +EV Finder to log one.
@@ -371,11 +376,11 @@ export default function BetsPage() {
               return (
                 <tr
                   key={b.id}
-                  className="border-t border-neutral-800 hover:bg-neutral-900/60"
+                  className="border-t border-ppborder hover:bg-surface2"
                 >
-                  <Td className="text-neutral-400 text-xs whitespace-nowrap" title={b.game}>
+                  <Td className="text-muted text-xs whitespace-nowrap" title={b.game}>
                     {abbreviateGame(b.game)}
-                    <div className="text-neutral-600">
+                    <div className="text-dim">
                       {new Date(b.commence_time).toLocaleString()}
                     </div>
                   </Td>
@@ -392,13 +397,13 @@ export default function BetsPage() {
                     </span>
                   </Td>
                   <Td>{b.line}</Td>
-                  <Td className="text-xs text-neutral-300">
+                  <Td className="text-xs text-pptext">
                     {b.bet_book_title}
                   </Td>
                   <Td className="font-medium">
                     {fmtAmerican(b.bet_american)}
                   </Td>
-                  <Td className="text-neutral-300">
+                  <Td className="text-pptext">
                     {Number(b.stake).toFixed(b.stake % 1 === 0 ? 0 : 2)}u
                   </Td>
                   <Td>
@@ -406,17 +411,17 @@ export default function BetsPage() {
                       <>
                         {fmtAmerican(closeAm)}
                         {resolved.sourceLabel && (
-                          <div className="text-[10px] text-neutral-500">
+                          <div className="text-[10px] text-muted">
                             {resolved.sourceLabel}
                           </div>
                         )}
                       </>
                     ) : pending ? (
-                      <span className="text-amber-500/80 text-xs">
+                      <span className="text-ppyellow text-xs">
                         pending
                       </span>
                     ) : (
-                      <span className="text-neutral-500 text-xs">—</span>
+                      <span className="text-muted text-xs">—</span>
                     )}
                   </Td>
                   <Td>
@@ -428,7 +433,7 @@ export default function BetsPage() {
                       return ev !== null ? (
                         <EvCell ev={ev} />
                       ) : (
-                        <span className="text-neutral-600">—</span>
+                        <span className="text-dim">—</span>
                       );
                     })()}
                   </Td>
@@ -441,7 +446,7 @@ export default function BetsPage() {
                           (e.target.value || null) as BetWithCLV["result"]
                         )
                       }
-                      className="bg-neutral-900 border border-neutral-700 rounded px-1 py-0.5 text-xs"
+                      className="bg-surface2 border border-ppborder2 rounded px-1 py-0.5 text-xs text-pptext"
                     >
                       <option value="">—</option>
                       <option value="win">Win</option>
@@ -453,7 +458,7 @@ export default function BetsPage() {
                   <Td>
                     <button
                       onClick={() => onDelete(b.id)}
-                      className="text-xs text-red-400/70 hover:text-red-300"
+                      className="text-xs text-ppred/70 hover:text-red-300"
                       title="Delete bet"
                     >
                       ✕
@@ -466,7 +471,7 @@ export default function BetsPage() {
         </table>
       </div>
 
-      <div className="text-xs text-neutral-500 mt-4 space-y-1">
+      <div className="text-xs text-muted mt-4 space-y-1">
         <p>
           <strong>CLV</strong> = (your decimal odds ÷ closing decimal odds) − 1.
           Positive means you got better than the close.
@@ -538,13 +543,13 @@ function Stat({
 }) {
   const valueClass =
     color === "green"
-      ? "text-emerald-400"
+      ? "text-ppgreen"
       : color === "red"
-      ? "text-red-400"
-      : "text-neutral-100";
+      ? "text-ppred"
+      : "text-pptext";
   return (
-    <div className="rounded border border-neutral-800 bg-neutral-900/40 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-neutral-500">
+    <div className="rounded-[10px] border border-ppborder bg-panel px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-muted">
         {label}
       </div>
       <div className={`text-lg font-semibold ${valueClass}`}>{value}</div>
@@ -553,10 +558,10 @@ function Stat({
 }
 
 function ClvCell({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-neutral-600">—</span>;
+  if (value === null) return <span className="text-dim">—</span>;
   const pct = value * 100;
   const cls =
-    pct > 0 ? "text-emerald-400" : pct < 0 ? "text-red-400" : "text-neutral-300";
+    pct > 0 ? "text-ppgreen" : pct < 0 ? "text-ppred" : "text-pptext";
   const sign = pct > 0 ? "+" : "";
   return (
     <span className={cls}>
@@ -570,12 +575,12 @@ function EvCell({ ev }: { ev: number }) {
   const pct = ev * 100;
   const cls =
     pct >= 5
-      ? "text-emerald-400"
+      ? "text-ppgreen"
       : pct >= 2
-      ? "text-emerald-500/80"
+      ? "text-ppgreen/80"
       : pct >= 0
-      ? "text-neutral-300"
-      : "text-red-400/70";
+      ? "text-pptext"
+      : "text-ppred/70";
   const sign = pct >= 0 ? "+" : "";
   return (
     <span className={cls}>

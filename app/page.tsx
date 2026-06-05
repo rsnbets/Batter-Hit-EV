@@ -13,6 +13,7 @@ import { abbreviateGame } from "@/lib/teams";
 import UserBadge from "./UserBadge";
 import ReferenceBookSelect from "./ReferenceBookSelect";
 import { useReferenceBook } from "./useReferenceBook";
+import Hero from "./Hero";
 
 interface ApiResponse {
   plays: PlayProw[];
@@ -334,29 +335,68 @@ export default function Home() {
     return n;
   }, [filters]);
 
-  return (
-    <main className="max-w-[1400px] mx-auto p-4 sm:p-6">
-      <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-wider font-[family-name:var(--font-orbitron)]">
-            MLB BATTER HITS — +EV FINDER
-          </h1>
-          <p className="text-sm text-neutral-400 mt-1">
-            Three fair-odds methods side-by-side. Compare and pick what works for you.
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/bets"
-            className="text-sm text-blue-400 hover:text-blue-300"
-          >
-            View Bet Log →
-          </Link>
-          <UserBadge />
-        </div>
-      </header>
+  // Hero meta line: timestamp, row count, credits + secondary nav.
+  const heroMeta = data ? (
+    <>
+      {data.cached ? "Cached • " : ""}
+      Fetched <strong className="text-pptext font-medium">{new Date(data.fetchedAt).toLocaleTimeString()}</strong>
+      {" "}•{" "}
+      <strong className="text-pptext font-medium">{filteredPlays.length}/{data.plays.length}</strong> rows
+      {data.remainingRequests && (() => {
+        const rem = Number(data.remainingRequests);
+        const lowColor =
+          rem < 500 ? "text-ppred" : rem < 2000 ? "text-ppyellow" : "text-muted";
+        return (
+          <>
+            {" "}•{" "}
+            <span className={lowColor}>
+              <strong className={`${lowColor} font-medium`}>{rem.toLocaleString()}</strong> credits
+            </span>
+          </>
+        );
+      })()}
+      {" "}•{" "}
+      <Link href="/bets" className="text-ppcyan hover:opacity-80">Bet Log →</Link>
+    </>
+  ) : null;
 
-      <div className="flex items-center gap-1 mb-4 border-b border-neutral-800">
+  return (
+    <main className="max-w-[1400px] mx-auto px-4 sm:px-6 pb-12">
+      <div className="flex justify-end pt-2">
+        <UserBadge />
+      </div>
+
+      <Hero tagline="MLB Batter Hits +EV" meta={heroMeta} />
+
+      {tab === "ev" && (
+        <details className="mb-4 rounded-[10px] border border-ppborder bg-panel">
+          <summary className="cursor-pointer list-none px-3 py-3 text-sm tracking-[1.5px] uppercase text-ppgreen hover:opacity-80 transition-opacity text-center">
+            How to use this
+          </summary>
+          <div className="px-3 pb-3 pt-1 text-xs text-muted space-y-1 border-t border-ppborder">
+            <p>
+              <strong className="text-pptext">Tip</strong>: every column has a filter under its header. Text fields use &quot;contains&quot;; numeric fields use &quot;≥&quot;. Click a header to sort.
+            </p>
+            <p>
+              <strong className="text-pptext">Avg (raw)</strong>: simple average of implied probabilities across books — vig included.
+            </p>
+            <p>
+              <strong className="text-pptext">Devig</strong>: each book&apos;s Over/Under is de-vigged with the power method first, then averaged equally.
+            </p>
+            <p>
+              <strong className="text-pptext">Sharp</strong>: by default, the de-vigged average of all sharp books pooled together (Novig, ProphetX, Pinnacle when present). Use the <em>Ref</em> dropdown to anchor this column to a specific book instead — the column header reflects your choice.
+            </p>
+            <p>
+              <strong className="text-pptext">Δ</strong>: spread between the highest and lowest EV across methods. Big delta = methods disagree — those are the ones to study.
+            </p>
+            <p>
+              <strong className="text-pptext">Bks</strong>: shown as <span className="text-pptext">de-vigged</span><span className="text-dim">/total</span>. The first number is how many books quoted <em>both</em> sides (and thus contributed to the Devig &amp; Sharp fair-odds math). The second is the total number quoting your side at all. Higher de-vig count = more trustworthy fair estimate.
+            </p>
+          </div>
+        </details>
+      )}
+
+      <div className="flex items-center gap-1 mb-4 border-b border-ppborder">
         <TabButton active={tab === "ev"} onClick={() => setTab("ev")}>
           +EV Plays
         </TabButton>
@@ -365,11 +405,12 @@ export default function Home() {
         </TabButton>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         <button
           onClick={() => load(true)}
           disabled={loading}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded font-medium text-sm"
+          className="px-3.5 py-2 bg-ppcyan border border-ppcyan text-[#06101e] rounded-[10px] text-[11px] font-bold tracking-[1.5px] uppercase hover:opacity-90 disabled:opacity-50 transition-opacity"
+          style={{ boxShadow: "0 0 16px rgba(0,212,255,0.25)" }}
         >
           {loading ? "Loading…" : "Refresh"}
         </button>
@@ -377,10 +418,10 @@ export default function Home() {
         <button
           onClick={clearFilters}
           disabled={activeFilterCount === 0}
-          className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 disabled:hover:bg-neutral-800 rounded text-xs"
+          className="px-3 py-2 border border-ppborder2 bg-panel text-pptext rounded-[10px] text-[11px] font-bold tracking-[1.5px] uppercase hover:border-ppcyan hover:text-ppcyan disabled:opacity-40 disabled:hover:border-ppborder2 disabled:hover:text-pptext transition-colors"
           title="Clear all column filters"
         >
-          Clear filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+          Clear{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
         </button>
 
         <ReferenceBookSelect
@@ -388,58 +429,39 @@ export default function Home() {
           onChange={setReferenceBook}
         />
 
-        {data && (
-          <div className="text-xs text-neutral-500 ml-auto text-right">
-            {data.cached ? "Cached • " : ""}
-            Fetched {new Date(data.fetchedAt).toLocaleTimeString()} •{" "}
-            {filteredPlays.length}/{data.plays.length} rows
-            {data.remainingRequests && (() => {
-              const rem = Number(data.remainingRequests);
-              const used =
-                sessionStartCredits !== null
-                  ? Math.max(0, sessionStartCredits - rem)
-                  : null;
-              const lowColor =
-                rem < 500
-                  ? "text-red-400"
-                  : rem < 2000
-                  ? "text-amber-400"
-                  : "text-neutral-500";
-              return (
-                <>
-                  {" "}• <span className={lowColor}>API credits left: {rem.toLocaleString()}</span>
-                  {used !== null && used > 0 && (
-                    <> <span className="text-neutral-600">(used {used} this session)</span></>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        )}
+        {data && data.remainingRequests && sessionStartCredits !== null && (() => {
+          const rem = Number(data.remainingRequests);
+          const used = Math.max(0, sessionStartCredits - rem);
+          if (used <= 0) return null;
+          return (
+            <div className="ml-auto text-[11px] text-dim font-mono">
+              {used} credits this session
+            </div>
+          );
+        })()}
       </div>
 
       {data?.remainingRequests && Number(data.remainingRequests) < 2000 && (
         <div
-          className={`rounded p-3 mb-4 text-sm ${
+          className={`rounded-[10px] p-3 mb-4 text-sm border ${
             Number(data.remainingRequests) < 500
-              ? "bg-red-950/60 border border-red-800 text-red-200"
-              : "bg-amber-950/50 border border-amber-800/60 text-amber-200"
+              ? "bg-[var(--red-dim)] border-ppred/40 text-ppred"
+              : "bg-[rgba(245,181,69,0.08)] border-ppyellow/40 text-ppyellow"
           }`}
         >
-          ⚠️ Only <strong>{Number(data.remainingRequests).toLocaleString()}</strong> API credits remaining.
-          {" "}Each manual Refresh now costs ~90 credits (15 events × 3 regions × 2 markets).
-          {" "}Avoid hitting Refresh repeatedly.
+          ⚠ Only <strong>{Number(data.remainingRequests).toLocaleString()}</strong> API credits remaining.
+          {" "}Each manual Refresh costs ~90 credits.
         </div>
       )}
 
       {err && (
-        <div className="bg-red-950/60 border border-red-800 text-red-200 rounded p-3 mb-4 text-sm">
+        <div className="bg-[var(--red-dim)] border border-ppred/40 text-ppred rounded p-3 mb-4 text-sm">
           {err}
         </div>
       )}
 
       {data?.errors && data.errors.length > 0 && (
-        <details className="bg-amber-950/40 border border-amber-800/60 rounded p-3 mb-4 text-xs text-amber-200">
+        <details className="bg-[rgba(245,181,69,0.08)] border border-ppyellow/30 rounded p-3 mb-4 text-xs text-ppyellow">
           <summary className="cursor-pointer">
             {data.errors.length} per-event error(s)
           </summary>
@@ -452,9 +474,9 @@ export default function Home() {
       )}
 
       {tab === "ev" && (
-      <div className="overflow-x-auto rounded border border-neutral-800">
+      <div className="overflow-x-auto rounded-[14px] border border-ppborder bg-panel">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-900 text-neutral-400 text-xs uppercase">
+          <thead className="bg-surface2 text-muted text-[10px] tracking-[1.5px] font-bold uppercase border-b border-ppborder2">
             <tr>
               <Th onClick={() => setSort("player")}>
                 Player{sortIndicator("player")}
@@ -476,7 +498,7 @@ export default function Home() {
               </Th>
               <Th
                 onClick={() => setSort("rawFair")}
-                className="border-l border-neutral-800"
+                className="border-l border-ppborder"
               >
                 Avg (raw){sortIndicator("rawFair")}
               </Th>
@@ -485,7 +507,7 @@ export default function Home() {
               </Th>
               <Th
                 onClick={() => setSort("devigFair")}
-                className="border-l border-neutral-800"
+                className="border-l border-ppborder"
               >
                 Devig{sortIndicator("devigFair")}
               </Th>
@@ -494,19 +516,19 @@ export default function Home() {
               </Th>
               <Th
                 onClick={() => setSort("pinFair")}
-                className="border-l border-neutral-800 bg-blue-950/40"
+                className="border-l border-ppborder bg-[rgba(0,212,255,0.10)]"
               >
                 {referenceLabel}{sortIndicator("pinFair")}
               </Th>
               <Th
                 onClick={() => setSort("pinEv")}
-                className="bg-blue-950/40"
+                className="bg-[rgba(0,212,255,0.10)]"
               >
                 EV %{sortIndicator("pinEv")}
               </Th>
               <Th
                 onClick={() => setSort("delta")}
-                className="border-l border-neutral-800"
+                className="border-l border-ppborder"
               >
                 Δ{sortIndicator("delta")}
               </Th>
@@ -516,7 +538,7 @@ export default function Home() {
               <Th>Track</Th>
             </tr>
             {/* Per-column filter row */}
-            <tr className="bg-neutral-950 border-t border-neutral-800">
+            <tr className="bg-bg border-t border-ppborder">
               <FilterTd>
                 <TextFilter
                   value={filters.player}
@@ -528,7 +550,7 @@ export default function Home() {
                 <select
                   value={filters.side}
                   onChange={(e) => setF("side", e.target.value as ColFilters["side"])}
-                  className="w-full bg-neutral-900 border border-neutral-700 rounded px-1 py-0.5 text-xs"
+                  className="w-full bg-neutral-900 border border-ppborder2 rounded px-1 py-0.5 text-xs"
                 >
                   <option value="all">All</option>
                   <option value="Over">Over</option>
@@ -539,7 +561,7 @@ export default function Home() {
                 <select
                   value={filters.line}
                   onChange={(e) => setF("line", e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-700 rounded px-1 py-0.5 text-xs"
+                  className="w-full bg-neutral-900 border border-ppborder2 rounded px-1 py-0.5 text-xs"
                 >
                   <option value="all">All</option>
                   {lineOptions.map((l) => (
@@ -570,7 +592,7 @@ export default function Home() {
                   placeholder="≥ odds"
                 />
               </FilterTd>
-              <FilterTd className="border-l border-neutral-800">
+              <FilterTd className="border-l border-ppborder">
                 <NumFilter
                   value={filters.rawFairMin}
                   onChange={(v) => setF("rawFairMin", v)}
@@ -584,7 +606,7 @@ export default function Home() {
                   placeholder="≥ %"
                 />
               </FilterTd>
-              <FilterTd className="border-l border-neutral-800">
+              <FilterTd className="border-l border-ppborder">
                 <NumFilter
                   value={filters.devigFairMin}
                   onChange={(v) => setF("devigFairMin", v)}
@@ -598,21 +620,21 @@ export default function Home() {
                   placeholder="≥ %"
                 />
               </FilterTd>
-              <FilterTd className="border-l border-neutral-800 bg-blue-950/20">
+              <FilterTd className="border-l border-ppborder bg-[rgba(0,212,255,0.05)]">
                 <NumFilter
                   value={filters.pinFairMin}
                   onChange={(v) => setF("pinFairMin", v)}
                   placeholder="≥ fair"
                 />
               </FilterTd>
-              <FilterTd className="bg-blue-950/20">
+              <FilterTd className="bg-[rgba(0,212,255,0.05)]">
                 <NumFilter
                   value={filters.pinEvMin}
                   onChange={(v) => setF("pinEvMin", v)}
                   placeholder="≥ %"
                 />
               </FilterTd>
-              <FilterTd className="border-l border-neutral-800">
+              <FilterTd className="border-l border-ppborder">
                 <NumFilter
                   value={filters.deltaMin}
                   onChange={(v) => setF("deltaMin", v)}
@@ -632,7 +654,7 @@ export default function Home() {
           <tbody>
             {filteredPlays.length === 0 && !loading && (
               <tr>
-                <td colSpan={15} className="text-center text-neutral-500 py-8">
+                <td colSpan={15} className="text-center text-muted py-8">
                   {data
                     ? activeFilterCount > 0
                       ? "No rows match your column filters. Clear some filters to see more."
@@ -651,13 +673,13 @@ export default function Home() {
                 <Fragment key={rowKey}>
                   <tr
                     onClick={() => setExpandedKey(expanded ? null : rowKey)}
-                    className={`border-t border-neutral-800 cursor-pointer hover:bg-neutral-900/60 ${
-                      expanded ? "bg-neutral-900/40" : ""
+                    className={`border-t border-ppborder cursor-pointer hover:bg-surface2/70 ${
+                      expanded ? "bg-surface2/50" : ""
                     }`}
                     title="Click to see all books for this line"
                   >
                     <Td className="font-medium whitespace-nowrap">
-                      <span className="text-neutral-500 mr-1 select-none">
+                      <span className="text-muted mr-1 select-none">
                         {expanded ? "▾" : "▸"}
                       </span>
                       {p.player}
@@ -672,60 +694,48 @@ export default function Home() {
                       </span>
                     </Td>
                     <Td>{p.line}</Td>
-                    <Td className="text-neutral-400 text-xs whitespace-nowrap" title={p.game}>
+                    <Td className="text-muted text-xs whitespace-nowrap" title={p.game}>
                       {abbreviateGame(p.game)}
                     </Td>
-                    <Td>
-                      {p.bestBook}
-                      {p.sharpCount > 0 && (
-                        <span
-                          title={`${p.sharpCount} sharp book(s) used in the Sharp fair calc`}
-                          className="ml-1 text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.6)]"
-                        >
-                          ★
-                        </span>
-                      )}
-                    </Td>
+                    <Td>{p.bestBook}</Td>
                     <Td className="font-medium">{fmtAmerican(p.bestAmerican)}</Td>
 
-                    <Td className="border-l border-neutral-800 text-right text-neutral-300">
+                    <Td className="border-l border-ppborder text-right text-pptext">
                       {fmtAmerican(p.marketAvgRaw.fairAmerican)}
                     </Td>
                     <Td className="text-right">
                       <EvCell ev={p.marketAvgRaw.evPercent} />
                     </Td>
 
-                    <Td className="border-l border-neutral-800 text-right text-neutral-300">
+                    <Td className="border-l border-ppborder text-right text-pptext">
                       {fmtAmerican(p.marketAvgDevig.fairAmerican)}
                     </Td>
                     <Td className="text-right">
                       <EvCell ev={p.marketAvgDevig.evPercent} />
                     </Td>
 
-                    <Td className="border-l border-neutral-800 text-right bg-blue-950/20 text-neutral-200">
+                    <Td className="border-l border-ppborder text-right bg-[rgba(0,212,255,0.05)] text-pptext">
                       {sharp.fair === null
                         ? "—"
                         : fmtAmerican(sharp.fair)}
                     </Td>
-                    <Td className="text-right bg-blue-950/20 font-bold">
+                    <Td className="text-right bg-[rgba(0,212,255,0.05)] font-bold">
                       {sharp.ev === null ? (
-                        <span className="text-neutral-600">—</span>
+                        <span className="text-dim">—</span>
                       ) : (
                         <EvCell ev={sharp.ev} />
                       )}
                     </Td>
 
-                    <Td className="border-l border-neutral-800 text-right text-neutral-400 text-xs">
+                    <Td className="border-l border-ppborder text-right text-muted text-xs">
                       {(delta * 100).toFixed(1)}%
                     </Td>
                     <Td
-                      className="text-neutral-500 text-xs"
-                      title={`${p.numDevigBooks} de-vig + ${extras} one-sided`}
+                      className="text-muted text-xs"
+                      title={`${p.numDevigBooks} de-vigged / ${p.numBooks} total (${extras} one-sided)`}
                     >
-                      {p.numBooks}
-                      {extras > 0 && (
-                        <span className="text-amber-500/70">+{extras}</span>
-                      )}
+                      <span className="text-pptext">{p.numDevigBooks}</span>
+                      <span className="text-dim">/{p.numBooks}</span>
                     </Td>
                     <Td>
                       <button
@@ -733,17 +743,17 @@ export default function Home() {
                           e.stopPropagation();
                           setTrackPlay(p);
                         }}
-                        className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium"
+                        className="px-2.5 py-1 bg-ppcyan border border-ppcyan text-[#06101e] rounded-[8px] text-[10px] font-bold tracking-[1.2px] uppercase hover:opacity-90 transition-opacity"
                       >
                         Track
                       </button>
                     </Td>
                   </tr>
                   {expanded && (
-                    <tr className="bg-neutral-950">
+                    <tr className="bg-bg">
                       <td
                         colSpan={15}
-                        className="px-3 py-3 border-t border-neutral-800"
+                        className="px-3 py-3 border-t border-ppborder"
                       >
                         <BookBreakdown play={p} />
                       </td>
@@ -764,29 +774,6 @@ export default function Home() {
           onMinMarginChange={setArbMinMargin}
           onTrack={setTrackArb}
         />
-      )}
-
-      {tab === "ev" && (
-      <div className="text-xs text-neutral-500 mt-4 space-y-1">
-        <p>
-          <strong>Tip</strong>: every column has a filter under its header. Text fields use &quot;contains&quot;; numeric fields use &quot;≥&quot;. Click a header to sort.
-        </p>
-        <p>
-          <strong>Avg (raw)</strong>: simple average of implied probabilities across books — vig included. This is roughly your current method.
-        </p>
-        <p>
-          <strong>Devig</strong>: each book&apos;s Over/Under is de-vigged with the power method first, then averaged equally.
-        </p>
-        <p>
-          <strong>Sharp</strong>: by default, the de-vigged average of all sharp books pooled together (Novig, ProphetX, Pinnacle when present). Use the <em>Reference</em> dropdown above to anchor this column to a specific sharp book instead — the column header reflects your choice.
-        </p>
-        <p>
-          <strong>Δ</strong>: spread between the highest and lowest EV across methods. Big delta = methods disagree — those are the ones to study.
-        </p>
-        <p>
-          ★ = at least one sharp book is in the Sharp fair calc for this row.
-        </p>
-      </div>
       )}
 
       {trackPlay && (
@@ -818,10 +805,10 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+      className={`px-4 py-2 text-[11px] font-bold tracking-[1.5px] uppercase border-b-2 -mb-px transition-colors ${
         active
-          ? "border-blue-500 text-blue-300"
-          : "border-transparent text-neutral-500 hover:text-neutral-300"
+          ? "border-ppcyan text-ppcyan"
+          : "border-transparent text-muted hover:text-pptext"
       }`}
     >
       {children}
@@ -906,20 +893,20 @@ function TrackModal({
       onClick={onClose}
     >
       <div
-        className="bg-neutral-950 border border-neutral-800 rounded-lg p-5 max-w-md w-full"
+        className="bg-bg border border-ppborder rounded-lg p-5 max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-3">
           <div>
             <h2 className="text-lg font-semibold">Track bet</h2>
-            <p className="text-xs text-neutral-400 mt-0.5">
+            <p className="text-xs text-muted mt-0.5">
               {play.player} — {play.side} {play.line}
             </p>
-            <p className="text-xs text-neutral-500">{play.game}</p>
+            <p className="text-xs text-muted">{play.game}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-neutral-500 hover:text-neutral-300 text-xl leading-none"
+            className="text-muted hover:text-pptext text-xl leading-none"
             aria-label="Close"
           >
             ×
@@ -928,11 +915,11 @@ function TrackModal({
 
         <div className="space-y-3">
           <label className="block">
-            <div className="text-xs text-neutral-400 mb-1">Book</div>
+            <div className="text-xs text-muted mb-1">Book</div>
             <select
               value={bookKey}
               onChange={(e) => onBookChange(e.target.value)}
-              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm"
+              className="w-full bg-neutral-900 border border-ppborder2 rounded px-2 py-1.5 text-sm"
             >
               {offers.map((o) => (
                 <option key={o.bookKey} value={o.bookKey}>
@@ -943,31 +930,31 @@ function TrackModal({
           </label>
 
           <label className="block">
-            <div className="text-xs text-neutral-400 mb-1">
+            <div className="text-xs text-muted mb-1">
               American odds (override if you got a different price)
             </div>
             <input
               type="number"
               value={american}
               onChange={(e) => setAmerican(Number(e.target.value))}
-              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm"
+              className="w-full bg-neutral-900 border border-ppborder2 rounded px-2 py-1.5 text-sm"
             />
           </label>
 
           <label className="block">
-            <div className="text-xs text-neutral-400 mb-1">Stake (units)</div>
+            <div className="text-xs text-muted mb-1">Stake (units)</div>
             <input
               type="number"
               step="0.1"
               value={stake}
               onChange={(e) => setStake(Number(e.target.value))}
-              className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm"
+              className="w-full bg-neutral-900 border border-ppborder2 rounded px-2 py-1.5 text-sm"
             />
           </label>
         </div>
 
         {err && (
-          <div className="mt-3 bg-red-950/60 border border-red-800 text-red-200 rounded p-2 text-xs">
+          <div className="mt-3 bg-[var(--red-dim)] border border-ppred/40 text-ppred rounded p-2 text-xs">
             {err}
           </div>
         )}
@@ -983,7 +970,7 @@ function TrackModal({
           <button
             onClick={submit}
             disabled={submitting || done}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-sm font-medium"
+            className="px-3.5 py-2 bg-ppcyan border border-ppcyan text-[#06101e] rounded-[10px] text-[11px] font-bold tracking-[1.5px] uppercase hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
             {done ? "Tracked ✓" : submitting ? "Saving…" : "Save"}
           </button>
@@ -1011,30 +998,30 @@ function ArbPanel({
 
   return (
     <div>
-      <div className="rounded bg-amber-950/40 border border-amber-800/60 p-3 mb-4 text-xs text-amber-200">
+      <div className="rounded bg-[rgba(245,181,69,0.08)] border border-ppyellow/30 p-3 mb-4 text-xs text-ppyellow">
         ⚠️ Arbs disappear quickly. Verify both lines are still live at each book before placing. Some books void player props on DNP — read each book&apos;s rules before sizing big.
       </div>
 
       <div className="flex items-center gap-3 mb-3 text-xs">
-        <label className="flex items-center gap-2 text-neutral-400">
+        <label className="flex items-center gap-2 text-muted">
           Min margin
           <input
             type="number"
             step="0.1"
             value={minMarginPct}
             onChange={(e) => onMinMarginChange(Number(e.target.value))}
-            className="w-20 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-neutral-100"
+            className="w-20 bg-neutral-900 border border-ppborder2 rounded px-2 py-1 text-pptext"
           />
-          <span className="text-neutral-500">%</span>
+          <span className="text-muted">%</span>
         </label>
-        <div className="text-neutral-500">
+        <div className="text-muted">
           {filtered.length} of {arbs.length} arbs shown
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded border border-neutral-800">
+      <div className="overflow-x-auto rounded-[14px] border border-ppborder bg-panel">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-900 text-neutral-400 text-xs uppercase">
+          <thead className="bg-surface2 text-muted text-[10px] tracking-[1.5px] font-bold uppercase border-b border-ppborder2">
             <tr>
               <Th>Player</Th>
               <Th>Line</Th>
@@ -1049,7 +1036,7 @@ function ArbPanel({
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center text-neutral-500 py-8">
+                <td colSpan={8} className="text-center text-muted py-8">
                   {arbs.length === 0
                     ? "No arbs detected on the current slate."
                     : `No arbs ≥ ${minMarginPct}% margin. Lower the threshold to see smaller ones.`}
@@ -1063,16 +1050,16 @@ function ArbPanel({
               return (
                 <tr
                   key={`${a.eventId}-${a.player}-${a.line}-${i}`}
-                  className="border-t border-neutral-800 hover:bg-neutral-900/60"
+                  className="border-t border-ppborder hover:bg-surface2/70"
                 >
                   <Td className="font-medium">{a.player}</Td>
                   <Td>{a.line}</Td>
-                  <Td className="text-neutral-400 text-xs">{a.game}</Td>
+                  <Td className="text-muted text-xs">{a.game}</Td>
                   <Td>
                     <div className="text-sky-400 font-medium">
                       {fmtAmerican(a.overAmerican)}
                     </div>
-                    <div className="text-[11px] text-neutral-500">
+                    <div className="text-[11px] text-muted">
                       {a.overBook}
                     </div>
                   </Td>
@@ -1080,21 +1067,21 @@ function ArbPanel({
                     <div className="text-orange-400 font-medium">
                       {fmtAmerican(a.underAmerican)}
                     </div>
-                    <div className="text-[11px] text-neutral-500">
+                    <div className="text-[11px] text-muted">
                       {a.underBook}
                     </div>
                   </Td>
                   <Td className="text-right">
                     <ArbMarginCell pct={marginPct} />
                   </Td>
-                  <Td className="text-xs text-neutral-300">
+                  <Td className="text-xs text-pptext">
                     <div>O: ${overStake.toFixed(2)}</div>
                     <div>U: ${underStake.toFixed(2)}</div>
                   </Td>
                   <Td>
                     <button
                       onClick={() => onTrack(a)}
-                      className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-xs font-medium"
+                      className="px-2.5 py-1 bg-ppcyan border border-ppcyan text-[#06101e] rounded-[8px] text-[10px] font-bold tracking-[1.2px] uppercase hover:opacity-90 transition-opacity"
                     >
                       Track
                     </button>
@@ -1114,8 +1101,8 @@ function ArbMarginCell({ pct }: { pct: number }) {
     pct >= 3
       ? "text-emerald-300 font-bold"
       : pct >= 1
-      ? "text-emerald-400 font-semibold"
-      : "text-emerald-500/80";
+      ? "text-ppgreen font-semibold"
+      : "text-ppgreen/80";
   return <span className={cls}>+{pct.toFixed(2)}%</span>;
 }
 
@@ -1192,20 +1179,20 @@ function TrackArbModal({
       onClick={onClose}
     >
       <div
-        className="bg-neutral-950 border border-neutral-800 rounded-lg p-5 max-w-md w-full"
+        className="bg-bg border border-ppborder rounded-lg p-5 max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-3">
           <div>
             <h2 className="text-lg font-semibold">Track arbitrage</h2>
-            <p className="text-xs text-neutral-400 mt-0.5">
+            <p className="text-xs text-muted mt-0.5">
               {arb.player} — {arb.line}
             </p>
-            <p className="text-xs text-neutral-500">{arb.game}</p>
+            <p className="text-xs text-muted">{arb.game}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-neutral-500 hover:text-neutral-300 text-xl leading-none"
+            className="text-muted hover:text-pptext text-xl leading-none"
             aria-label="Close"
           >
             ×
@@ -1213,22 +1200,22 @@ function TrackArbModal({
         </div>
 
         <label className="block mb-3">
-          <div className="text-xs text-neutral-400 mb-1">Total stake ($)</div>
+          <div className="text-xs text-muted mb-1">Total stake ($)</div>
           <input
             type="number"
             step="1"
             value={totalStake}
             onChange={(e) => setTotalStake(Number(e.target.value))}
-            className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm"
+            className="w-full bg-neutral-900 border border-ppborder2 rounded px-2 py-1.5 text-sm"
           />
         </label>
 
-        <div className="text-xs space-y-1 bg-neutral-900/60 rounded p-3 border border-neutral-800">
+        <div className="text-xs space-y-1 bg-surface2/70 rounded p-3 border border-ppborder">
           <div className="flex justify-between">
             <span className="text-sky-400">
               Over @ {arb.overBook} ({fmtAmerican(arb.overAmerican)})
             </span>
-            <span className="text-neutral-200 font-medium">
+            <span className="text-pptext font-medium">
               ${overStake.toFixed(2)}
             </span>
           </div>
@@ -1236,26 +1223,26 @@ function TrackArbModal({
             <span className="text-orange-400">
               Under @ {arb.underBook} ({fmtAmerican(arb.underAmerican)})
             </span>
-            <span className="text-neutral-200 font-medium">
+            <span className="text-pptext font-medium">
               ${underStake.toFixed(2)}
             </span>
           </div>
-          <div className="border-t border-neutral-800 pt-1 mt-1 flex justify-between">
-            <span className="text-neutral-400">Guaranteed return</span>
-            <span className="text-emerald-400 font-medium">
+          <div className="border-t border-ppborder pt-1 mt-1 flex justify-between">
+            <span className="text-muted">Guaranteed return</span>
+            <span className="text-ppgreen font-medium">
               ${guaranteedReturn.toFixed(2)}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-neutral-400">Profit (margin)</span>
-            <span className="text-emerald-400 font-bold">
+            <span className="text-muted">Profit (margin)</span>
+            <span className="text-ppgreen font-bold">
               +${profit.toFixed(2)} ({(arb.marginPct * 100).toFixed(2)}%)
             </span>
           </div>
         </div>
 
         {err && (
-          <div className="mt-3 bg-red-950/60 border border-red-800 text-red-200 rounded p-2 text-xs">
+          <div className="mt-3 bg-[var(--red-dim)] border border-ppred/40 text-ppred rounded p-2 text-xs">
             {err}
           </div>
         )}
@@ -1271,7 +1258,7 @@ function TrackArbModal({
           <button
             onClick={submit}
             disabled={submitting || done}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-sm font-medium"
+            className="px-3.5 py-2 bg-ppcyan border border-ppcyan text-[#06101e] rounded-[10px] text-[11px] font-bold tracking-[1.5px] uppercase hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
             {done ? "Both legs tracked ✓" : submitting ? "Saving…" : "Save both legs"}
           </button>
@@ -1297,7 +1284,7 @@ function Th({
       onClick={onClick}
       title={title}
       className={`px-2 py-2 text-left font-medium whitespace-nowrap ${
-        onClick ? "cursor-pointer hover:text-neutral-200" : ""
+        onClick ? "cursor-pointer hover:text-pptext" : ""
       } ${className}`}
     >
       {children}
@@ -1346,7 +1333,7 @@ function TextFilter({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full bg-neutral-900 border border-neutral-700 rounded px-1 py-0.5 text-xs placeholder:text-neutral-600"
+      className="w-full bg-neutral-900 border border-ppborder2 rounded px-1 py-0.5 text-xs placeholder:text-dim"
     />
   );
 }
@@ -1367,7 +1354,7 @@ function NumFilter({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       step="any"
-      className="w-full bg-neutral-900 border border-neutral-700 rounded px-1 py-0.5 text-xs placeholder:text-neutral-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      className="w-full bg-neutral-900 border border-ppborder2 rounded px-1 py-0.5 text-xs placeholder:text-dim [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
     />
   );
 }
@@ -1376,12 +1363,12 @@ function EvCell({ ev }: { ev: number }) {
   const pct = ev * 100;
   const cls =
     pct >= 5
-      ? "text-emerald-400"
+      ? "text-ppgreen"
       : pct >= 2
-      ? "text-emerald-500/80"
+      ? "text-ppgreen/80"
       : pct >= 0
-      ? "text-neutral-300"
-      : "text-red-400/70";
+      ? "text-pptext"
+      : "text-ppred/70";
   const sign = pct >= 0 ? "+" : "";
   return <span className={cls}>{sign}{pct.toFixed(2)}%</span>;
 }
@@ -1406,15 +1393,15 @@ function BookBreakdown({ play }: { play: PlayProw }) {
   });
   return (
     <div>
-      <div className="text-xs text-neutral-400 mb-2">
+      <div className="text-xs text-muted mb-2">
         {play.player} — {play.side} {play.line} —{" "}
-        <span className="text-neutral-500">
+        <span className="text-muted">
           {play.numDevigBooks} books de-vigged, {play.numBooks - play.numDevigBooks} one-sided
         </span>
       </div>
       <div className="overflow-x-auto">
         <table className="text-xs border-collapse">
-          <thead className="text-neutral-500">
+          <thead className="text-muted">
             <tr>
               <th className="text-left pr-6 pb-1">Book</th>
               <th className="text-right pr-6 pb-1">Over</th>
@@ -1430,30 +1417,30 @@ function BookBreakdown({ play }: { play: PlayProw }) {
               return (
                 <tr
                   key={o.bookKey}
-                  className="border-t border-neutral-800/60"
+                  className="border-t border-ppborder/60"
                 >
                   <td
                     className={`pr-6 py-0.5 ${
-                      sideHighlight ? "text-emerald-400 font-semibold" : "text-neutral-300"
+                      sideHighlight ? "text-ppgreen font-semibold" : "text-pptext"
                     }`}
                   >
                     {o.bookTitle}
                   </td>
                   <td
                     className={`text-right pr-6 py-0.5 ${
-                      isOver && sideHighlight ? "text-emerald-400 font-semibold" : "text-neutral-300"
+                      isOver && sideHighlight ? "text-ppgreen font-semibold" : "text-pptext"
                     }`}
                   >
                     {fmtAmerican(o.overAmerican)}
                   </td>
                   <td
                     className={`text-right pr-6 py-0.5 ${
-                      !isOver && sideHighlight ? "text-emerald-400 font-semibold" : "text-neutral-300"
+                      !isOver && sideHighlight ? "text-ppgreen font-semibold" : "text-pptext"
                     }`}
                   >
                     {fmtAmerican(o.underAmerican)}
                   </td>
-                  <td className="pl-2 py-0.5 text-neutral-500">
+                  <td className="pl-2 py-0.5 text-muted">
                     {o.devigged ? "de-vig" : "one-sided"}
                   </td>
                 </tr>
