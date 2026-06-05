@@ -579,8 +579,8 @@ function EvCell({ ev }: { ev: number }) {
       : pct >= 2
       ? "text-ppgreen/80"
       : pct >= 0
-      ? "text-pptext"
-      : "text-ppred/70";
+      ? "text-ppgreen/60"
+      : "text-ppred/80";
   const sign = pct >= 0 ? "+" : "";
   return (
     <span className={cls}>
