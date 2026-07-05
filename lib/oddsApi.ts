@@ -519,3 +519,48 @@ export async function getEVPlays(apiKey: string): Promise<OddsApiResult> {
     errors,
   };
 }
+
+/**
+ * Feed-driven twin of getEVPlays: reads the shared hourly slate feed
+ * (lib/slateFeed.ts) instead of The Odds API. Zero credits, more books,
+ * hourly-fresh. All downstream math (buildPlaysForEvent: de-vig, sharps
+ * weighting, EV, arbs) is identical.
+ */
+export async function getEVPlaysFromFeed(): Promise<OddsApiResult> {
+  const { fetchFeedEvents } = await import("./slateFeed");
+  const errors: string[] = [];
+  const { events, feedFetchedAt } = await fetchFeedEvents();
+
+  const now = Date.now();
+  const horizon = now + 36 * 60 * 60 * 1000;
+  const upcoming = events.filter((e) => {
+    const t = new Date(e.commence_time).getTime();
+    return t > now && t < horizon;
+  });
+
+  const allPlays: PlayProw[] = [];
+  const allArbs: ArbRow[] = [];
+  for (const ev of upcoming) {
+    try {
+      const out = buildPlaysForEvent(ev);
+      allPlays.push(...out.plays);
+      allArbs.push(...out.arbs);
+    } catch (err) {
+      errors.push(`Event ${ev.id}: ${String(err)}`);
+    }
+  }
+
+  allPlays.sort(
+    (a, b) => b.pinnacleWeighted.evPercent - a.pinnacleWeighted.evPercent
+  );
+  allArbs.sort((a, b) => b.marginPct - a.marginPct);
+
+  return {
+    plays: allPlays,
+    arbs: allArbs,
+    remainingRequests: null,   // feed reads are free — no credit counters
+    usedRequests: feedFetchedAt, // surface the slate's fetch time in the UI slot
+    fetchedAt: new Date().toISOString(),
+    errors,
+  };
+}

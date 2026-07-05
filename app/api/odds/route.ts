@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEVPlays, OddsApiResult } from "@/lib/oddsApi";
+import { getEVPlays, getEVPlaysFromFeed, OddsApiResult } from "@/lib/oddsApi";
 import { getCurrentUserId } from "@/lib/auth";
 import { supabase as supabaseAdmin } from "@/lib/supabase";
 
@@ -17,8 +17,13 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const force = url.searchParams.get("refresh") === "1";
 
+  // PRIMARY source is the shared hourly slate feed (free, more books).
+  // The Odds API path survives as fallback — used only if the feed fetch
+  // fails AND an ODDS_API_KEY is configured. Set ODDS_SOURCE=oddsapi to
+  // force the legacy path.
+  const useFeed = (process.env.ODDS_SOURCE ?? "feed") !== "oddsapi";
   const apiKey = process.env.ODDS_API_KEY;
-  if (!apiKey) {
+  if (!useFeed && !apiKey) {
     return NextResponse.json(
       { error: "ODDS_API_KEY not set" },
       { status: 500 }
@@ -30,9 +35,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Rate limit only the explicit refresh action (the credit-spending one).
-  // Initial loads / cached responses don't count.
-  if (force) {
+  // Rate limit only the explicit refresh action. Feed reads are free, so the
+  // daily budget only applies when refreshes spend Odds API credits.
+  if (force && !useFeed) {
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
     const { data: row } = await supabaseAdmin
       .from("usage")
@@ -64,7 +69,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await getEVPlays(apiKey);
+    let result: OddsApiResult;
+    if (useFeed) {
+      try {
+        result = await getEVPlaysFromFeed();
+      } catch (feedErr) {
+        // Feed unreachable — fall back to The Odds API if we can.
+        if (!apiKey) throw feedErr;
+        result = await getEVPlays(apiKey);
+        result.errors.push(
+          `slate feed failed (${String(feedErr)}) — served from The Odds API fallback`
+        );
+      }
+    } else {
+      result = await getEVPlays(apiKey!);
+    }
     cache = { result, ts: Date.now() };
     return NextResponse.json({ ...result, cached: false });
   } catch (err) {
