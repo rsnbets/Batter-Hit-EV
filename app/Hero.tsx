@@ -24,7 +24,7 @@ export default function Hero({
       >
         PROFIT<span className="text-ppgreen">PATH</span>
       </div>
-      <span className="block font-brand text-[11px] font-normal tracking-[0.5em] uppercase text-dim mb-[18px]">
+      <span className="block font-brand text-[11px] font-normal tracking-[0.5em] uppercase text-[#FF8C00] mb-[18px]">
         Sports
       </span>
       <div
